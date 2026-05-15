@@ -3,7 +3,7 @@ import { findDatOneViewport } from "./dat-one-virtual.js";
 const ROW_DIR_ATTR = "data-dat-ext-row-dir";
 export const ROW_DIR_CONTEXT_ATTR = "data-dat-ext-row-dir-context";
 
-const DIR_BTN_SVG = `<svg width="14" height="14" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+const DIR_BTN_SVG = `<svg width="18" height="18" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
   <path d="M24 4C15.7157 4 9 10.7157 9 19C9 30.5 24 44 24 44C24 44 39 30.5 39 19C39 10.7157 32.2843 4 24 4Z" fill="#34A853"/>
   <path d="M24 12C20.134 12 17 15.134 17 19C17 22.866 20.134 26 24 26C27.866 26 31 22.866 31 19C31 15.134 27.866 12 24 12Z" fill="#FBBC05"/>
   <path d="M24 4C21.465 4 19.074 4.646 16.914 5.776L24 19L31.086 5.776C28.926 4.646 26.535 4 24 4Z" fill="#EA4335"/>
@@ -15,30 +15,24 @@ const DIR_BTN_SVG = `<svg width="14" height="14" viewBox="0 0 48 48" fill="none"
  * @returns {HTMLElement | null}
  */
 function findTripCell(row) {
-  return (
-    row.querySelector('[data-test="load-trip-cell"]') ??
-    row.querySelector(".cell-trip")
-  );
+  return row.querySelector('[data-test="load-trip-cell"]') ?? row.querySelector(".cell-trip");
 }
 
 /**
- * @param {HTMLElement} tripCell
- * @returns {HTMLElement | null}
+ * @param {HTMLElement} insertParent
  */
-function findTripMilesElement(tripCell) {
-  const miles = tripCell.querySelector(".trip-miles");
-  if (miles instanceof HTMLElement) {
-    return miles;
-  }
-  return tripCell;
+function applyTripMilesFlexLayout(insertParent) {
+  insertParent.style.display = "flex";
+  insertParent.style.alignItems = "center";
+  insertParent.style.gap = "6px";
 }
 
 /**
  * @param {Document} doc
- * @param {HTMLElement} milesAnchor
  * @param {"list" | "detail"} context
+ * @returns {HTMLButtonElement}
  */
-function createDirectionButton(doc, milesAnchor, context) {
+function createDirectionButton(doc, context) {
   const btn = doc.createElement("button");
   btn.type = "button";
   btn.setAttribute(ROW_DIR_ATTR, "1");
@@ -47,16 +41,11 @@ function createDirectionButton(doc, milesAnchor, context) {
   btn.title = "Open Google Maps directions (search origin → pickup → delivery)";
   btn.setAttribute("aria-label", "Open Google Maps directions");
   btn.innerHTML = DIR_BTN_SVG;
-
-  if (milesAnchor.classList.contains("trip-miles")) {
-    milesAnchor.insertAdjacentElement("afterend", btn);
-  } else {
-    milesAnchor.appendChild(btn);
-  }
+  return btn;
 }
 
 /**
- * Injects a small directions control after trip miles in DAT One virtual rows.
+ * Injects a small directions control before trip miles in DAT One virtual rows.
  * Idempotent per row (survives virtual scroll reuse when Angular replaces nodes).
  *
  * @param {Document} doc
@@ -83,12 +72,20 @@ export function injectRowSummaryDirectionAnchors(doc) {
       continue;
     }
 
-    const milesAnchor = findTripMilesElement(tripCell);
-    if (!(milesAnchor instanceof HTMLElement)) {
+    const miles = tripCell.querySelector(".trip-miles");
+    if (!(miles instanceof HTMLElement)) {
       continue;
     }
 
-    createDirectionButton(doc, milesAnchor, "list");
+    const insertParent = miles.parentElement;
+    if (!(insertParent instanceof HTMLElement)) {
+      continue;
+    }
+
+    applyTripMilesFlexLayout(insertParent);
+
+    const btn = createDirectionButton(doc, "list");
+    insertParent.insertBefore(btn, miles);
   }
 }
 
@@ -120,15 +117,9 @@ export function injectLoadDetailDirectionAnchors(doc) {
       continue;
     }
 
-    const btn = doc.createElement("button");
-    btn.type = "button";
-    btn.setAttribute(ROW_DIR_ATTR, "1");
-    btn.setAttribute(ROW_DIR_CONTEXT_ATTR, "detail");
-    btn.className = "dat-ext-row-dir-btn";
-    btn.title = "Open Google Maps directions (search origin → pickup → delivery)";
-    btn.setAttribute("aria-label", "Open Google Maps directions");
-    btn.innerHTML = DIR_BTN_SVG;
+    applyTripMilesFlexLayout(insertParent);
 
+    const btn = createDirectionButton(doc, "detail");
     insertParent.insertBefore(btn, miles);
   }
 }

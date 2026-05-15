@@ -12153,19 +12153,18 @@ Thank you.`;
     return { pickup, delivery };
   }
   function buildGoogleDirectionsUrl(searchOrigin, pickup, delivery) {
-    const search = sanitizeLocationText(searchOrigin);
-    const pickupPoint = sanitizeLocationText(pickup);
-    const destination = sanitizeLocationText(delivery);
-    const origin = search || pickupPoint;
+    const search = sanitizeLocationText(searchOrigin || "");
+    const originPoint = sanitizeLocationText(pickup || "");
+    const destPoint = sanitizeLocationText(delivery || "");
     const url = new URL("https://www.google.com/maps/dir/?api=1");
-    url.searchParams.set("origin", origin);
-    url.searchParams.set("destination", destination);
     url.searchParams.set("travelmode", "driving");
-    const searchLoc = parseCityState(search);
-    const pickupLoc = parseCityState(pickupPoint);
-    const sameOrigin = searchLoc && pickupLoc && normalizeCityStateKey(searchLoc.city, searchLoc.state) === normalizeCityStateKey(pickupLoc.city, pickupLoc.state);
-    if (pickupPoint && !sameOrigin && search) {
-      url.searchParams.set("waypoints", pickupPoint);
+    if (search && search.toLowerCase() !== originPoint.toLowerCase()) {
+      url.searchParams.set("origin", search);
+      url.searchParams.set("waypoints", originPoint);
+      url.searchParams.set("destination", destPoint);
+    } else {
+      url.searchParams.set("origin", originPoint);
+      url.searchParams.set("destination", destPoint);
     }
     return url.toString();
   }
@@ -12988,7 +12987,7 @@ Thank you.`;
   // src/row-summary-directions.js
   var ROW_DIR_ATTR = "data-dat-ext-row-dir";
   var ROW_DIR_CONTEXT_ATTR = "data-dat-ext-row-dir-context";
-  var DIR_BTN_SVG = `<svg width="14" height="14" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  var DIR_BTN_SVG = `<svg width="18" height="18" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
   <path d="M24 4C15.7157 4 9 10.7157 9 19C9 30.5 24 44 24 44C24 44 39 30.5 39 19C39 10.7157 32.2843 4 24 4Z" fill="#34A853"/>
   <path d="M24 12C20.134 12 17 15.134 17 19C17 22.866 20.134 26 24 26C27.866 26 31 22.866 31 19C31 15.134 27.866 12 24 12Z" fill="#FBBC05"/>
   <path d="M24 4C21.465 4 19.074 4.646 16.914 5.776L24 19L31.086 5.776C28.926 4.646 26.535 4 24 4Z" fill="#EA4335"/>
@@ -12997,14 +12996,12 @@ Thank you.`;
   function findTripCell(row) {
     return row.querySelector('[data-test="load-trip-cell"]') ?? row.querySelector(".cell-trip");
   }
-  function findTripMilesElement(tripCell) {
-    const miles = tripCell.querySelector(".trip-miles");
-    if (miles instanceof HTMLElement) {
-      return miles;
-    }
-    return tripCell;
+  function applyTripMilesFlexLayout(insertParent) {
+    insertParent.style.display = "flex";
+    insertParent.style.alignItems = "center";
+    insertParent.style.gap = "6px";
   }
-  function createDirectionButton(doc, milesAnchor, context) {
+  function createDirectionButton(doc, context) {
     const btn = doc.createElement("button");
     btn.type = "button";
     btn.setAttribute(ROW_DIR_ATTR, "1");
@@ -13013,11 +13010,7 @@ Thank you.`;
     btn.title = "Open Google Maps directions (search origin \u2192 pickup \u2192 delivery)";
     btn.setAttribute("aria-label", "Open Google Maps directions");
     btn.innerHTML = DIR_BTN_SVG;
-    if (milesAnchor.classList.contains("trip-miles")) {
-      milesAnchor.insertAdjacentElement("afterend", btn);
-    } else {
-      milesAnchor.appendChild(btn);
-    }
+    return btn;
   }
   function injectRowSummaryDirectionAnchors(doc) {
     const viewport = findDatOneViewport(doc);
@@ -13036,11 +13029,17 @@ Thank you.`;
       if (!(tripCell instanceof HTMLElement)) {
         continue;
       }
-      const milesAnchor = findTripMilesElement(tripCell);
-      if (!(milesAnchor instanceof HTMLElement)) {
+      const miles = tripCell.querySelector(".trip-miles");
+      if (!(miles instanceof HTMLElement)) {
         continue;
       }
-      createDirectionButton(doc, milesAnchor, "list");
+      const insertParent = miles.parentElement;
+      if (!(insertParent instanceof HTMLElement)) {
+        continue;
+      }
+      applyTripMilesFlexLayout(insertParent);
+      const btn = createDirectionButton(doc, "list");
+      insertParent.insertBefore(btn, miles);
     }
   }
   function injectLoadDetailDirectionAnchors(doc) {
@@ -13059,14 +13058,8 @@ Thank you.`;
       if (!(insertParent instanceof HTMLElement)) {
         continue;
       }
-      const btn = doc.createElement("button");
-      btn.type = "button";
-      btn.setAttribute(ROW_DIR_ATTR, "1");
-      btn.setAttribute(ROW_DIR_CONTEXT_ATTR, "detail");
-      btn.className = "dat-ext-row-dir-btn";
-      btn.title = "Open Google Maps directions (search origin \u2192 pickup \u2192 delivery)";
-      btn.setAttribute("aria-label", "Open Google Maps directions");
-      btn.innerHTML = DIR_BTN_SVG;
+      applyTripMilesFlexLayout(insertParent);
+      const btn = createDirectionButton(doc, "detail");
       insertParent.insertBefore(btn, miles);
     }
   }

@@ -1,5 +1,4 @@
 import { sanitizeLocationText } from "./parsers.js";
-import { normalizeCityStateKey, parseCityState } from "./routing.js";
 
 export function extractLaneFromRow(row) {
   if (!(row instanceof Element)) {
@@ -24,25 +23,20 @@ export function extractLaneFromRow(row) {
 }
 
 export function buildGoogleDirectionsUrl(searchOrigin, pickup, delivery) {
-  const search = sanitizeLocationText(searchOrigin);
-  const pickupPoint = sanitizeLocationText(pickup);
-  const destination = sanitizeLocationText(delivery);
+  const search = sanitizeLocationText(searchOrigin || "");
+  const originPoint = sanitizeLocationText(pickup || "");
+  const destPoint = sanitizeLocationText(delivery || "");
 
-  const origin = search || pickupPoint;
   const url = new URL("https://www.google.com/maps/dir/?api=1");
-  url.searchParams.set("origin", origin);
-  url.searchParams.set("destination", destination);
   url.searchParams.set("travelmode", "driving");
 
-  const searchLoc = parseCityState(search);
-  const pickupLoc = parseCityState(pickupPoint);
-  const sameOrigin =
-    searchLoc &&
-    pickupLoc &&
-    normalizeCityStateKey(searchLoc.city, searchLoc.state) === normalizeCityStateKey(pickupLoc.city, pickupLoc.state);
-
-  if (pickupPoint && !sameOrigin && search) {
-    url.searchParams.set("waypoints", pickupPoint);
+  if (search && search.toLowerCase() !== originPoint.toLowerCase()) {
+    url.searchParams.set("origin", search);
+    url.searchParams.set("waypoints", originPoint);
+    url.searchParams.set("destination", destPoint);
+  } else {
+    url.searchParams.set("origin", originPoint);
+    url.searchParams.set("destination", destPoint);
   }
 
   return url.toString();

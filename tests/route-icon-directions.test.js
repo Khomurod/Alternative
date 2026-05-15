@@ -25,6 +25,14 @@ describe("route icon helpers", () => {
     expect(url.searchParams.get("waypoints")).toBeNull();
   });
 
+  it("uses direct pickup-to-delivery route when search origin is empty", () => {
+    const url = new URL(buildGoogleDirectionsUrl("", "Tucker, GA", "Cincinnati, OH"));
+    expect(url.href).toContain("https://www.google.com/maps/dir/?api=1");
+    expect(url.searchParams.get("origin")).toBe("Tucker, GA");
+    expect(url.searchParams.get("destination")).toBe("Cincinnati, OH");
+    expect(url.searchParams.get("waypoints")).toBeNull();
+  });
+
   it("extracts pickup and delivery from DAT row cells", () => {
     document.body.innerHTML = `
       <div class="table-row">
