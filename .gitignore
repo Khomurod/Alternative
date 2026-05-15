@@ -1,1 +1,8 @@
 node_modules/
+
+dist/
+
+DAT-Dispatcher-Assist-Setup.exe
+
+tools/nsis-portable/
+tools/nsis-*.zip

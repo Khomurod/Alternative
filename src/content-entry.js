@@ -477,47 +477,36 @@ function applyDraftTargets(root) {
   scheduleScan(true);
 }
 
-function collectEmailCandidates(doc) {
-  const unique = new Set();
-  const samples = [...doc.querySelectorAll('a[href^="mailto:"], .table-cell, dat-company')].slice(0, 400);
-  for (const el of samples) {
-    const text = String(el?.textContent || "");
-    const match = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi);
-    if (!match) {
-      continue;
-    }
-    for (const email of match) {
-      unique.add(email.toLowerCase());
-      if (unique.size >= 12) {
-        return [...unique];
-      }
-    }
-  }
-  return [...unique];
-}
-
 function syncCompactEmailOptions(root) {
   const select = root.querySelector('[data-field="email-select"]');
   if (!(select instanceof HTMLSelectElement)) {
     return;
   }
 
-  const existing = new Set([...select.options].map((option) => option.value));
-  const candidates = collectEmailCandidates(document);
+  const account = String(state.userAccountEmail || "").trim();
 
-  for (const email of candidates) {
-    if (existing.has(email)) {
-      continue;
-    }
+  select.replaceChildren();
+
+  if (account) {
+    select.disabled = false;
     const option = document.createElement("option");
-    option.value = email;
-    option.textContent = email;
+    option.value = account;
+    option.textContent = account;
     select.appendChild(option);
-  }
 
-  const desired = state.emailUiState.selectedEmail || candidates[0] || "";
-  if (desired) {
-    select.value = desired;
+    const stored = String(state.emailUiState.selectedEmail || "").trim();
+    if (stored !== account) {
+      persistEmailUiState({ ...state.emailUiState, selectedEmail: account });
+    }
+    select.value = account;
+  } else {
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Sign in required";
+    placeholder.disabled = true;
+    select.appendChild(placeholder);
+    select.value = "";
+    select.disabled = true;
   }
 }
 
@@ -600,6 +589,10 @@ function attachUserAccountEmailListener() {
 
     state.userAccountEmail = String(changes[DAT_EXT_USER_ACCOUNT_EMAIL_KEY].newValue || "").trim();
     syncConnectEmailButton();
+    const toolsRoot = document.getElementById(HEADER_TOOLS_ID);
+    if (toolsRoot) {
+      syncCompactEmailOptions(toolsRoot);
+    }
     scheduleScan(true);
   });
 }
@@ -644,6 +637,10 @@ function requestGoogleLogin() {
           ...state.emailUiState,
           selectedEmail: state.userAccountEmail
         });
+      }
+      const toolsRoot = document.getElementById(HEADER_TOOLS_ID);
+      if (toolsRoot) {
+        syncCompactEmailOptions(toolsRoot);
       }
       scheduleScan(true);
       return;

@@ -661,19 +661,25 @@ tr.dat-ext-grid-row,
 tr.dat-ext-grid-row--pass,
 .row-container.dat-ext-grid-row--pass,
 [role="row"].dat-ext-grid-row--pass {
-  box-shadow: inset 3px 0 0 0 #15803d;
+  box-shadow: none;
+  background-color: #dcfce7 !important;
+  color: #111827 !important;
 }
 
 tr.dat-ext-grid-row--fail,
 .row-container.dat-ext-grid-row--fail,
 [role="row"].dat-ext-grid-row--fail {
-  box-shadow: inset 3px 0 0 0 #b91c1c;
+  box-shadow: none;
+  background-color: #fee2e2 !important;
+  color: #111827 !important;
 }
 
 tr.dat-ext-grid-row--partial,
 .row-container.dat-ext-grid-row--partial,
 [role="row"].dat-ext-grid-row--partial {
-  box-shadow: inset 3px 0 0 0 #ca8a04;
+  box-shadow: none;
+  background-color: #fef3c7 !important;
+  color: #111827 !important;
 }
 
 tr.dat-ext-grid-row--negotiate,

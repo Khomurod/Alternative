@@ -10273,15 +10273,15 @@
     if (minRate === null && minRpm === null && maxMiles === null && maxWeight === null) {
       return "neutral";
     }
+    const hasPostedRate = row.rateDollars !== null && Number.isFinite(row.rateDollars) && row.rateDollars > 0;
+    if (!hasPostedRate) {
+      return "fail";
+    }
     const rpm = resolveDisplayRpm(row.rateDollars, row.tripMiles, row.rpmHint);
-    const hasPostedRate = row.rateDollars !== null && row.rateDollars > 0;
-    const rateCheck = minRate === null ? null : hasPostedRate ? row.rateDollars >= minRate : null;
+    const rateCheck = minRate === null ? null : row.rateDollars >= minRate;
     const rpmCheck = minRpm === null ? null : rpm === null ? null : rpm >= minRpm;
     const milesCheck = maxMiles === null ? null : row.tripMiles === null ? null : row.tripMiles <= maxMiles;
     const weightCheck = maxWeight === null ? null : row.weightLbs === null ? null : row.weightLbs <= maxWeight;
-    if (minRate !== null && rateCheck === null) {
-      return "negotiate";
-    }
     if (minRpm !== null && rpm === null) {
       return "negotiate";
     }
@@ -14569,43 +14569,32 @@ ${bookingBody}`.trim(),
     state.appliedTargets = parseTargetsFromPrefs(prefs);
     scheduleScan(true);
   }
-  function collectEmailCandidates(doc) {
-    const unique = /* @__PURE__ */ new Set();
-    const samples = [...doc.querySelectorAll('a[href^="mailto:"], .table-cell, dat-company')].slice(0, 400);
-    for (const el of samples) {
-      const text = String(el?.textContent || "");
-      const match = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi);
-      if (!match) {
-        continue;
-      }
-      for (const email of match) {
-        unique.add(email.toLowerCase());
-        if (unique.size >= 12) {
-          return [...unique];
-        }
-      }
-    }
-    return [...unique];
-  }
   function syncCompactEmailOptions(root) {
     const select = root.querySelector('[data-field="email-select"]');
     if (!(select instanceof HTMLSelectElement)) {
       return;
     }
-    const existing = new Set([...select.options].map((option) => option.value));
-    const candidates = collectEmailCandidates(document);
-    for (const email of candidates) {
-      if (existing.has(email)) {
-        continue;
-      }
+    const account = String(state.userAccountEmail || "").trim();
+    select.replaceChildren();
+    if (account) {
+      select.disabled = false;
       const option = document.createElement("option");
-      option.value = email;
-      option.textContent = email;
+      option.value = account;
+      option.textContent = account;
       select.appendChild(option);
-    }
-    const desired = state.emailUiState.selectedEmail || candidates[0] || "";
-    if (desired) {
-      select.value = desired;
+      const stored = String(state.emailUiState.selectedEmail || "").trim();
+      if (stored !== account) {
+        persistEmailUiState({ ...state.emailUiState, selectedEmail: account });
+      }
+      select.value = account;
+    } else {
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "Sign in required";
+      placeholder.disabled = true;
+      select.appendChild(placeholder);
+      select.value = "";
+      select.disabled = true;
     }
   }
   function injectHeaderTools() {
@@ -14677,6 +14666,10 @@ ${bookingBody}`.trim(),
       }
       state.userAccountEmail = String(changes[DAT_EXT_USER_ACCOUNT_EMAIL_KEY].newValue || "").trim();
       syncConnectEmailButton();
+      const toolsRoot = document.getElementById(HEADER_TOOLS_ID);
+      if (toolsRoot) {
+        syncCompactEmailOptions(toolsRoot);
+      }
       scheduleScan(true);
     });
   }
@@ -14714,6 +14707,10 @@ ${bookingBody}`.trim(),
             ...state.emailUiState,
             selectedEmail: state.userAccountEmail
           });
+        }
+        const toolsRoot = document.getElementById(HEADER_TOOLS_ID);
+        if (toolsRoot) {
+          syncCompactEmailOptions(toolsRoot);
         }
         scheduleScan(true);
         return;

@@ -4,10 +4,13 @@
   "version": "1.4.0",
   "type": "module",
   "scripts": {
-    "build": "esbuild src/content-entry.js --bundle --outfile=content.js --platform=browser --target=chrome114 --legal-comments=none && esbuild src/popup-entry.js --bundle --outfile=popup.js --platform=browser --target=chrome114 --legal-comments=none"
+    "build": "esbuild src/content-entry.js --bundle --outfile=content.js --platform=browser --target=chrome114 --legal-comments=none && esbuild src/popup-entry.js --bundle --outfile=popup.js --platform=browser --target=chrome114 --legal-comments=none",
+    "dist:exe": "node scripts/build-exe.mjs",
+    "dist:stage": "node scripts/build-exe.mjs --stage-only"
   },
   "devDependencies": {
-    "esbuild": "^0.24.2"
+    "esbuild": "^0.24.2",
+    "makensis": "^3.0.5"
   },
   "dependencies": {
     "leaflet": "^1.9.4"

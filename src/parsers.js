@@ -240,17 +240,18 @@ export function evaluateRowAgainstTargets(targets, row) {
     return "neutral";
   }
 
-  const rpm = resolveDisplayRpm(row.rateDollars, row.tripMiles, row.rpmHint);
-  const hasPostedRate = row.rateDollars !== null && row.rateDollars > 0;
+  const hasPostedRate =
+    row.rateDollars !== null && Number.isFinite(row.rateDollars) && row.rateDollars > 0;
+  if (!hasPostedRate) {
+    return "fail";
+  }
 
-  const rateCheck = minRate === null ? null : hasPostedRate ? row.rateDollars >= minRate : null;
+  const rpm = resolveDisplayRpm(row.rateDollars, row.tripMiles, row.rpmHint);
+
+  const rateCheck = minRate === null ? null : row.rateDollars >= minRate;
   const rpmCheck = minRpm === null ? null : rpm === null ? null : rpm >= minRpm;
   const milesCheck = maxMiles === null ? null : row.tripMiles === null ? null : row.tripMiles <= maxMiles;
   const weightCheck = maxWeight === null ? null : row.weightLbs === null ? null : row.weightLbs <= maxWeight;
-
-  if (minRate !== null && rateCheck === null) {
-    return "negotiate";
-  }
 
   if (minRpm !== null && rpm === null) {
     return "negotiate";
