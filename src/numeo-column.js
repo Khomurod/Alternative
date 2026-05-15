@@ -613,12 +613,21 @@ function formatTollSourceSubtitle(route, loadingRoute) {
     return "Loading...";
   }
   const src = route?.tollSource;
+  const tgHint = typeof route?.tollGuruFailureHint === "string" ? route.tollGuruFailureHint.trim() : "";
+  const hintShort = tgHint.length > 100 ? `${tgHint.slice(0, 98)}…` : tgHint;
+
   if (src === "tollguru") {
     const v = formatTollVehicleCaption(route?.tollVehicleType);
     return v ? `TollGuru (${v})` : "TollGuru";
   }
   if (src === "google") {
+    if (hintShort) {
+      return `Google Routes (fallback — TollGuru: ${hintShort})`;
+    }
     return "Google Routes";
+  }
+  if (tgHint && src === "none") {
+    return hintShort ? `Toll unavailable (${hintShort})` : "Not available";
   }
   return "Not available";
 }

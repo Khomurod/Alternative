@@ -1,9 +1,16 @@
-import { enhanceLoadDetails, findLaneRowFromLoadDetails } from "./detail-panel.js";
-import { buildGoogleDirectionsUrlForRow } from "./directions-from-row.js";
+import { enhanceLoadDetails } from "./detail-panel.js";
+import { buildGoogleDirectionsUrlForPin, buildGoogleDirectionsUrlForRow } from "./directions-from-row.js";
 import { EMAIL_BOOKING_TEMPLATE_KEY, EMAIL_OFFER_TEMPLATE_KEY } from "./email-template.js";
 import { DAT_EXT_NUMEO_COLUMN_KEY, defaultNumeoColumnEnabled } from "./feature-flags.js";
 import { DAT_EXT_USER_ACCOUNT_EMAIL_KEY } from "./google-account.js";
-import { DAT_EXT_TOLLGURU_API_KEY, getEffectiveTollGuruApiKey } from "./tollguru-api-key.js";
+import {
+  DAT_EXT_GOOGLE_TOLL_FALLBACK_KEY,
+  DAT_EXT_TOLLGURU_API_KEY,
+  DAT_EXT_TOLLGURU_SKIP_POLYLINE_MAP_KEY,
+  defaultGoogleTollFallbackAllowed,
+  getEffectiveTollGuruApiKey,
+  tollguruKeyFingerprint
+} from "./tollguru-api-key.js";
 import { queryDeepAll } from "./dom-deep.js";
 import { findDatOneViewport } from "./dat-one-virtual.js";
 import { findResultsGrid, scanDocumentForGrids } from "./grid.js";
@@ -45,6 +52,8 @@ const state = {
   inputsSyncHandler: null,
   routeInspector: null,
   tollguruApiKey: getEffectiveTollGuruApiKey(""),
+  googleTollFallbackAllowed: defaultGoogleTollFallbackAllowed(),
+  tollguruSkipPolylineForCurrentKey: false,
   emailOfferTemplate: "",
   emailBookingTemplate: "",
   numeroColumnEnabled: true,
@@ -74,7 +83,7 @@ function bootstrap() {
   window.__datDispatcherAssistInitialized = true;
   rebuildRouteInspector();
   loadNumeoColumnPreference();
-  loadTollguruApiKeyFromStorage();
+  loadRouteEconomicsPreferencesFromChrome();
   loadUserAccountEmailFromStorage();
 
   if (document.readyState === "loading") {
@@ -91,7 +100,7 @@ function start() {
   loadEmailUiStateFromStorage();
   attachEmailTemplateListener();
   attachNumeoColumnPreferenceListener();
-  attachTollguruApiKeyListener();
+  attachRouteEconomicsChromeListener();
   attachUserAccountEmailListener();
   attachRouteIconDirectionsListener();
   attachRowSummaryDirectionsListener();
@@ -99,41 +108,86 @@ function start() {
   scheduleScan(true);
 }
 
+function applyTollguruSkipPolylineFromRecord(record) {
+  const key = String(state.tollguruApiKey || "").trim();
+  if (!key) {
+    state.tollguruSkipPolylineForCurrentKey = false;
+    return;
+  }
+  const fp = tollguruKeyFingerprint(key);
+  const raw = record[DAT_EXT_TOLLGURU_SKIP_POLYLINE_MAP_KEY];
+  const map = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  state.tollguruSkipPolylineForCurrentKey = Boolean(map[fp]);
+}
+
 function rebuildRouteInspector() {
   state.routeInspector = createRouteInspector({
-    tollguruApiKey: state.tollguruApiKey
+    tollguruApiKey: state.tollguruApiKey,
+    googleTollFallbackAllowed: state.googleTollFallbackAllowed,
+    tollguruSkipPolylineForCurrentKey: state.tollguruSkipPolylineForCurrentKey
   });
   const keyLen = typeof state.tollguruApiKey === "string" ? state.tollguruApiKey.length : 0;
   if (keyLen === 0) {
-    console.warn("[TollGuru Debug] Effective TollGuru key is empty after rebuildRouteInspector; TollGuru calls are skipped.");
+    console.warn(
+      "[TollGuru Debug] No TollGuru API key configured; truck toll lookups are skipped. Add one in the extension popup."
+    );
   }
 }
 
-function loadTollguruApiKeyFromStorage() {
+function hydrateRouteEconomicsFromChromeRecord(record) {
+  state.tollguruApiKey = getEffectiveTollGuruApiKey(record[DAT_EXT_TOLLGURU_API_KEY]);
+  state.googleTollFallbackAllowed = record[DAT_EXT_GOOGLE_TOLL_FALLBACK_KEY] !== false;
+  applyTollguruSkipPolylineFromRecord(record ?? {});
+}
+
+function loadRouteEconomicsPreferencesFromChrome() {
   if (!globalThis.chrome?.storage?.local?.get) {
     return;
   }
 
-  chrome.storage.local.get([DAT_EXT_TOLLGURU_API_KEY], (result) => {
-    state.tollguruApiKey = getEffectiveTollGuruApiKey(result[DAT_EXT_TOLLGURU_API_KEY]);
-    rebuildRouteInspector();
-    scheduleScan(true);
-  });
+  chrome.storage.local.get(
+    [
+      DAT_EXT_TOLLGURU_API_KEY,
+      DAT_EXT_GOOGLE_TOLL_FALLBACK_KEY,
+      DAT_EXT_TOLLGURU_SKIP_POLYLINE_MAP_KEY
+    ],
+    (result) => {
+      hydrateRouteEconomicsFromChromeRecord(result ?? {});
+      rebuildRouteInspector();
+      scheduleScan(true);
+    }
+  );
 }
 
-function attachTollguruApiKeyListener() {
+function attachRouteEconomicsChromeListener() {
   if (!globalThis.chrome?.storage?.onChanged) {
     return;
   }
 
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== "local" || !changes[DAT_EXT_TOLLGURU_API_KEY]) {
+    if (area !== "local") {
+      return;
+    }
+    if (
+      !changes[DAT_EXT_TOLLGURU_API_KEY] &&
+      !changes[DAT_EXT_GOOGLE_TOLL_FALLBACK_KEY] &&
+      !changes[DAT_EXT_TOLLGURU_SKIP_POLYLINE_MAP_KEY]
+    ) {
       return;
     }
 
-    state.tollguruApiKey = getEffectiveTollGuruApiKey(changes[DAT_EXT_TOLLGURU_API_KEY].newValue);
-    rebuildRouteInspector();
-    scheduleScan(true);
+    chrome.storage.local.get(
+      [
+        DAT_EXT_TOLLGURU_API_KEY,
+        DAT_EXT_GOOGLE_TOLL_FALLBACK_KEY,
+        DAT_EXT_TOLLGURU_SKIP_POLYLINE_MAP_KEY
+      ],
+      (fresh) => {
+        hydrateRouteEconomicsFromChromeRecord(fresh ?? {});
+        rebuildRouteInspector();
+        scheduleScan(true);
+      }
+    );
   });
 }
 
@@ -1081,21 +1135,24 @@ function onRowSummaryDirectionsClick(event) {
   }
 
   const context = btn.getAttribute(ROW_DIR_CONTEXT_ATTR);
+  /** @type {HTMLElement | null} */
+  let detailHost = null;
   /** @type {Element | null} */
-  let row = null;
+  let listRowFallback = null;
+
   if (context === "detail") {
     const detail = btn.closest("dat-load-details");
-    const laneRow = detail instanceof HTMLElement ? findLaneRowFromLoadDetails(detail) : null;
-    row = laneRow;
+    detailHost = detail instanceof HTMLElement ? detail : null;
   } else {
-    row = btn.closest(".row-container, .table-row, [role='row'], tr, dat-row, dat-table-row");
+    listRowFallback = btn.closest(".row-container, .table-row, [role='row'], tr, dat-row, dat-table-row");
   }
 
-  if (!(row instanceof Element)) {
-    return;
-  }
-
-  const url = buildGoogleDirectionsUrlForRow(document, row);
+  const url =
+    context === "detail"
+      ? buildGoogleDirectionsUrlForPin(document, { detailHost })
+      : listRowFallback instanceof Element
+        ? buildGoogleDirectionsUrlForPin(document, { listRowFallback })
+        : null;
   if (!url) {
     return;
   }

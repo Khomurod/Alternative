@@ -1,25 +1,94 @@
 import { sanitizeLocationText } from "./parsers.js";
 
-export function extractLaneFromRow(row) {
+/**
+ * List / virtual row extraction — aligned with {@link parseDatOneVirtualRow},
+ * with terminal fallback to legacy `load-*-cell` / `.cell-*` anywhere on the row
+ * (minimal test fixtures and non-grid shapes).
+ *
+ * @param {Element} row
+ * @returns {{ pickup: string, delivery: string } | null}
+ */
+export function extractLanePickupDeliveryFromDatRow(row) {
   if (!(row instanceof Element)) {
     return null;
   }
 
-  const pickup = sanitizeLocationText(
-    row.querySelector('[data-test="load-origin-cell"]')?.textContent ||
-      row.querySelector(".cell-origin")?.textContent ||
+  const route = row.querySelector("dat-route");
+  const routeCell =
+    row.querySelector('[data-test="load-origin-cell"]')?.closest(".route-dh-container") ?? route;
+
+  let pickup = sanitizeLocationText(
+    routeCell?.querySelector('[data-test="load-origin-cell"]')?.textContent ??
+      route?.querySelector(".route-dh-container-lg .origin .extended-trip-point")?.textContent ??
+      route?.querySelector(".origin .extended-trip-point")?.textContent ??
+      route?.querySelector(".origin span")?.textContent ??
       ""
   );
-  const delivery = sanitizeLocationText(
-    row.querySelector('[data-test="load-destination-cell"]')?.textContent ||
-      row.querySelector(".cell-destination")?.textContent ||
+  let delivery = sanitizeLocationText(
+    routeCell?.querySelector('[data-test="load-destination-cell"]')?.textContent ??
+      route?.querySelector(".route-dh-container-lg .destination .extended-trip-point")?.textContent ??
+      route?.querySelector(".destination .extended-trip-point")?.textContent ??
+      route?.querySelector(".destination span")?.textContent ??
       ""
   );
+
+  if (!pickup) {
+    pickup = sanitizeLocationText(
+      row.querySelector('[data-test="load-origin-cell"]')?.textContent ||
+        row.querySelector(".cell-origin")?.textContent ||
+        ""
+    );
+  }
+  if (!delivery) {
+    delivery = sanitizeLocationText(
+      row.querySelector('[data-test="load-destination-cell"]')?.textContent ||
+        row.querySelector(".cell-destination")?.textContent ||
+        ""
+    );
+  }
 
   if (!pickup || !delivery) {
     return null;
   }
   return { pickup, delivery };
+}
+
+/** @deprecated Prefer {@link extractLanePickupDeliveryFromDatRow} */
+export function extractLaneFromRow(row) {
+  return extractLanePickupDeliveryFromDatRow(row);
+}
+
+/**
+ * Sanity-check that decoded params match what was intended (encoding / URL parser bugs).
+ *
+ * @param {string} urlHref
+ * @param {string} searchRaw
+ * @param {string} pickup
+ * @param {string} delivery
+ */
+export function validateBuiltDirectionsUrlMatches(urlHref, searchRaw, pickup, delivery) {
+  let u;
+  try {
+    u = new URL(urlHref);
+  } catch {
+    return false;
+  }
+  if (!u.href.startsWith("https://www.google.com/maps/dir/")) {
+    return false;
+  }
+  const search = sanitizeLocationText(searchRaw || "");
+  const originPoint = sanitizeLocationText(pickup || "");
+  const destPoint = sanitizeLocationText(delivery || "");
+  const abc = search && search.toLowerCase() !== originPoint.toLowerCase();
+
+  if (abc) {
+    return (
+      u.searchParams.get("origin") === search &&
+      u.searchParams.get("waypoints") === originPoint &&
+      u.searchParams.get("destination") === destPoint
+    );
+  }
+  return u.searchParams.get("origin") === originPoint && u.searchParams.get("destination") === destPoint;
 }
 
 export function buildGoogleDirectionsUrl(searchOrigin, pickup, delivery) {

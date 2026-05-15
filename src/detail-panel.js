@@ -98,6 +98,43 @@ export function findLaneRowFromLoadDetails(detailHost) {
   return row instanceof HTMLElement ? row : null;
 }
 
+/**
+ * Pickup / delivery for Maps directions — same precedence as Load Intelligence headline:
+ * route-details cities first; then expanded dat-route; then summary row cells via findSummaryRow.
+ *
+ * @param {Element} detailHost Typically `dat-load-details`.
+ * @returns {{ pickup: string, delivery: string } | null}
+ */
+export function extractPickupDeliveryFromLoadDetailHost(detailHost) {
+  if (!(detailHost instanceof Element)) {
+    return null;
+  }
+
+  const routeDetails = detailHost.querySelector('[data-test="route-details"]');
+  const summaryRow = findSummaryRow(detailHost);
+  const cityNodes = routeDetails ? [...routeDetails.querySelectorAll(".city, .extended-trip-point")] : [];
+
+  const pickup = sanitizeLocationText(
+    cityNodes[0]?.textContent ||
+      detailHost.querySelector("dat-route .origin .extended-trip-point")?.textContent ||
+      summaryRow?.querySelector('[data-test="load-origin-cell"]')?.textContent ||
+      summaryRow?.querySelector("dat-route .origin .extended-trip-point")?.textContent ||
+      ""
+  );
+  const delivery = sanitizeLocationText(
+    cityNodes[1]?.textContent ||
+      detailHost.querySelector("dat-route .destination .extended-trip-point")?.textContent ||
+      summaryRow?.querySelector('[data-test="load-destination-cell"]')?.textContent ||
+      summaryRow?.querySelector("dat-route .destination .extended-trip-point")?.textContent ||
+      ""
+  );
+
+  if (!pickup || !delivery) {
+    return null;
+  }
+  return { pickup, delivery };
+}
+
 function readBrokerMetrics(host) {
   const companyBlock =
     host.querySelector('[data-test="company-details-container"]') ?? host.querySelector("dat-company") ?? host;
@@ -197,24 +234,10 @@ function readDetailRate(host) {
 }
 
 export function extractLoadDetailData(detailHost) {
-  const routeDetails = detailHost.querySelector('[data-test="route-details"]');
   const summaryRow = findSummaryRow(detailHost);
-  const cityNodes = routeDetails ? [...routeDetails.querySelectorAll(".city, .extended-trip-point")] : [];
-
-  const origin = sanitizeLocationText(
-    cityNodes[0]?.textContent ||
-      detailHost.querySelector("dat-route .origin .extended-trip-point")?.textContent ||
-      summaryRow?.querySelector('[data-test="load-origin-cell"]')?.textContent ||
-      summaryRow?.querySelector("dat-route .origin .extended-trip-point")?.textContent ||
-      ""
-  );
-  const destination = sanitizeLocationText(
-    cityNodes[1]?.textContent ||
-      detailHost.querySelector("dat-route .destination .extended-trip-point")?.textContent ||
-      summaryRow?.querySelector('[data-test="load-destination-cell"]')?.textContent ||
-      summaryRow?.querySelector("dat-route .destination .extended-trip-point")?.textContent ||
-      ""
-  );
+  const lane = extractPickupDeliveryFromLoadDetailHost(detailHost);
+  const origin = lane?.pickup ?? "";
+  const destination = lane?.delivery ?? "";
 
   const tripMiles = readDetailTripMiles(detailHost);
   const rate = readDetailRate(detailHost);

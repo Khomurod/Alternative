@@ -5,6 +5,20 @@ import { fetchTollGuruLaneTolls } from "./tollguru-tolls.js";
 
 const CACHE_PREFIX = "dat-ext-route-cache-v4:";
 const CACHE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+
+/** @param {string} text @param {number} max */
+function shortenTollFailureHint(text, max = 260) {
+  const t = String(text || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!t) {
+    return "";
+  }
+  if (t.length <= max) {
+    return t;
+  }
+  return `${t.slice(0, max)}…`;
+}
 const STATE_NAMES = {
   AL: "alabama",
   AK: "alaska",
@@ -753,6 +767,10 @@ export async function inspectDispatcherM3Route(routeInspector, searchOriginText,
     tollStatus: leg2.tollStatus ?? "Unavailable",
     tollSource: typeof leg2.tollSource === "string" ? leg2.tollSource : "none",
     tollVehicleType: typeof leg2.tollVehicleType === "string" ? leg2.tollVehicleType : undefined,
+    tollGuruFailureHint:
+      typeof leg2.tollGuruFailureHint === "string" && leg2.tollGuruFailureHint.trim()
+        ? leg2.tollGuruFailureHint
+        : undefined,
     mapLineLatLngs,
     searchOriginLatLng,
     pickupMapLatLng,
@@ -770,6 +788,14 @@ export function createRouteInspector(options = {}) {
     typeof options.googleApiKey === "string" ? options.googleApiKey.trim() : GOOGLE_MAPS_API_KEY;
   const tollguruApiKey =
     typeof options.tollguruApiKey === "string" ? options.tollguruApiKey.trim() : "";
+  /** When false + TollGuru key configured, suppress Google toll numbers if TollGuru fails. */
+  const googleTollFallbackAllowed =
+    typeof options.googleTollFallbackAllowed === "boolean"
+      ? options.googleTollFallbackAllowed
+      : true;
+  /** Skip complete-polyline for this fingerprint (persisted hint after repeated 403s). */
+  const tollguruSkipPolylineForCurrentKey =
+    options.tollguruSkipPolylineForCurrentKey === true;
   const tollguruVehicleType =
     typeof options.tollguruVehicleType === "string" && options.tollguruVehicleType.trim()
       ? options.tollguruVehicleType.trim()
@@ -871,6 +897,10 @@ export function createRouteInspector(options = {}) {
         let tollFromTg = null;
         /** @type {"polyline" | "origin-destination" | null} */
         let tollGuruVia = null;
+        /** @type {string} */
+        let tollGuruFailureHint = "";
+
+        const hadTgKeyConfigured = Boolean(tollguruApiKey);
         if (tollguruApiKey && requestJson) {
           try {
             const tg = await fetchTollGuruLaneTolls(
@@ -881,7 +911,11 @@ export function createRouteInspector(options = {}) {
                 originAddress: origin?.display,
                 destinationAddress: destination?.display
               },
-              { mapProvider: mapProviderForTg, vehicleType: tollguruVehicleType }
+              {
+                mapProvider: mapProviderForTg,
+                vehicleType: tollguruVehicleType,
+                skipCompletePolyline: tollguruSkipPolylineForCurrentKey
+              }
             );
             tollFromTg = tg.tollStatus;
             tollGuruVia = tg.via;
@@ -895,17 +929,43 @@ export function createRouteInspector(options = {}) {
               mapProviderForTg,
               polylinePointCount: polylineSource?.mapLineLatLngs?.length ?? 0
             });
+            tollGuruFailureHint = shortenTollFailureHint(String(error?.message ?? error ?? "TollGuru error"));
             tollFromTg = null;
             tollGuruVia = null;
           }
         }
 
         if (tollFromTg) {
+          tollGuruFailureHint = "";
+        }
+
+        payload.tollGuruFailureHint = tollGuruFailureHint || undefined;
+
+        if (tollFromTg) {
           payload.tollStatus = tollFromTg;
-        } else if (googleRoute) {
+        } else if (googleRoute && (!hadTgKeyConfigured || googleTollFallbackAllowed)) {
           payload.tollStatus = googleRoute.tollStatus;
+        } else if (
+          googleRoute &&
+          hadTgKeyConfigured &&
+          !googleTollFallbackAllowed &&
+          tollguruApiKey
+        ) {
+          payload.tollStatus = tollGuruFailureHint
+            ? `Unavailable — TollGuru: ${tollGuruFailureHint} (Google toll fallback off in extension options.)`
+            : "Unavailable — TollGuru failed; Google toll fallback is off in extension options.";
+        } else if (!googleRoute && googleApiKey) {
+          payload.tollStatus = tollGuruFailureHint
+            ? `Unavailable — TollGuru: ${tollGuruFailureHint}`
+            : "Unavailable";
         } else if (!googleApiKey) {
-          payload.tollStatus = "Toll estimate unavailable (Google API key not configured)";
+          payload.tollStatus =
+            tollGuruFailureHint && hadTgKeyConfigured
+              ? `Toll unavailable — TollGuru: ${shortenTollFailureHint(
+                  tollGuruFailureHint,
+                  200
+                )}; bundled Google Routing key missing or disabled.`
+              : "Toll estimate unavailable (Google API key not configured)";
         }
 
         if (tollFromTg) {
@@ -914,7 +974,8 @@ export function createRouteInspector(options = {}) {
         } else if (
           googleRoute &&
           String(googleRoute.tollStatus || "").trim() &&
-          payload.tollStatus === googleRoute.tollStatus
+          payload.tollStatus === googleRoute.tollStatus &&
+          (!hadTgKeyConfigured || googleTollFallbackAllowed)
         ) {
           payload.tollSource = "google";
         } else {
@@ -928,11 +989,31 @@ export function createRouteInspector(options = {}) {
               ...(Array.isArray(googleRoute.notes) ? googleRoute.notes : []),
               "Miles/geometry from OSRM; toll estimate from TollGuru."
             ];
-          } else {
+          } else if (
+            hadTgKeyConfigured &&
+            !googleTollFallbackAllowed &&
+            tollGuruFailureHint
+          ) {
             payload.notes = [
               ...(Array.isArray(osrmRoute.notes) ? osrmRoute.notes : []),
               ...(Array.isArray(googleRoute.notes) ? googleRoute.notes : []),
-              "Miles/geometry from OSRM; toll estimate from Google Routes."
+              `Miles/geometry from OSRM. TollGuru: ${shortenTollFailureHint(
+                tollGuruFailureHint,
+                220
+              )}. Google toll fallback is off in extension options.`
+            ];
+          } else {
+            const googleTollNote =
+              tollGuruFailureHint && hadTgKeyConfigured && googleTollFallbackAllowed
+                ? `Miles/geometry from OSRM; toll estimate from Google Routes (TollGuru error: ${shortenTollFailureHint(
+                    tollGuruFailureHint,
+                    220
+                  )}).`
+                : "Miles/geometry from OSRM; toll estimate from Google Routes.";
+            payload.notes = [
+              ...(Array.isArray(osrmRoute.notes) ? osrmRoute.notes : []),
+              ...(Array.isArray(googleRoute.notes) ? googleRoute.notes : []),
+              googleTollNote
             ];
           }
         } else if (googleRoute && osrmError) {

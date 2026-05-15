@@ -1,4 +1,48 @@
 import { downsamplePolyline, encodePolylinePrecision5 } from "./polyline-encode.js";
+import {
+  DAT_EXT_TOLLGURU_SKIP_POLYLINE_MAP_KEY,
+  tollguruKeyFingerprint
+} from "./tollguru-api-key.js";
+
+function errorLooksLikeForbiddenHttp(error) {
+  return /\(\s*403\s*\)|\b403\b/.test(String(error?.message ?? error ?? ""));
+}
+
+/**
+ * Persist a hint per API key fingerprint: complete-polyline is not usable (typically HTTP 403 on this plan).
+ *
+ * @param {string} apiKey
+ * @param {unknown} error
+ */
+function persistTollguruPolySkipHint(apiKey, error) {
+  if (!String(apiKey || "").trim() || !errorLooksLikeForbiddenHttp(error)) {
+    return;
+  }
+  const chromeObj = typeof globalThis !== "undefined" ? globalThis.chrome : null;
+  if (!chromeObj?.storage?.local) {
+    return;
+  }
+
+  try {
+    const fp = tollguruKeyFingerprint(apiKey);
+    chromeObj.storage.local.get([DAT_EXT_TOLLGURU_SKIP_POLYLINE_MAP_KEY], (r) => {
+      try {
+        const prev = r[DAT_EXT_TOLLGURU_SKIP_POLYLINE_MAP_KEY];
+        /** @type {Record<string, boolean>} */
+        const map =
+          prev && typeof prev === "object" && !Array.isArray(prev)
+            ? { ...(/** @type {Record<string, boolean>} */ (prev)) }
+            : {};
+        map[fp] = true;
+        chromeObj.storage.local.set({ [DAT_EXT_TOLLGURU_SKIP_POLYLINE_MAP_KEY]: map });
+      } catch {
+        /* ignore corrupt storage payloads */
+      }
+    });
+  } catch {
+    /* ignore storage API errors */
+  }
+}
 
 export const TOLLGURU_COMPLETE_POLYLINE_URL =
   "https://apis.tollguru.com/toll/v2/complete-polyline-from-mapping-service";
@@ -146,7 +190,7 @@ export function preparePointsForTollGuru(mapLineLatLngs) {
  * @param {(url: string, init?: Record<string, unknown>) => Promise<unknown>} requestJson
  * @param {string} apiKey
  * @param {Array<[number, number]>} mapLineLatLngs
- * @param {{ mapProvider?: string, vehicleType?: string }} [options]
+ * @param {{ mapProvider?: string, vehicleType?: string, skipCompletePolyline?: boolean }} [options]
  * @returns {Promise<string>} tollStatus line
  */
 export async function fetchTollGuruTollStatus(requestJson, apiKey, mapLineLatLngs, options = {}) {
@@ -234,7 +278,7 @@ export async function fetchTollGuruOriginDestinationTolls(
  * @param {(url: string, init?: Record<string, unknown>) => Promise<unknown>} requestJson
  * @param {string} apiKey
  * @param {{ mapLineLatLngs?: Array<[number, number]> | null, originAddress?: string | null, destinationAddress?: string | null }} laneContext
- * @param {{ mapProvider?: string, vehicleType?: string }} [options]
+ * @param {{ mapProvider?: string, vehicleType?: string, skipCompletePolyline?: boolean }} [options]
  * @returns {Promise<{ tollStatus: string, via: "polyline" | "origin-destination" }>}
  */
 export async function fetchTollGuruLaneTolls(requestJson, apiKey, laneContext, options = {}) {
@@ -242,13 +286,15 @@ export async function fetchTollGuruLaneTolls(requestJson, apiKey, laneContext, o
   const from = String(originAddress ?? "").trim();
   const to = String(destinationAddress ?? "").trim();
   const polyOk = Array.isArray(mapLineLatLngs) && mapLineLatLngs.length >= 2;
+  const skipCompletePolyline = options.skipCompletePolyline === true;
 
-  if (polyOk) {
+  if (polyOk && !skipCompletePolyline) {
     try {
       const tollStatus = await fetchTollGuruTollStatus(requestJson, apiKey, mapLineLatLngs, options);
       return { tollStatus, via: "polyline" };
     } catch (error) {
       console.warn("[TollGuru Debug] complete-polyline failed, will try origin-destination if addresses exist:", error);
+      persistTollguruPolySkipHint(String(apiKey || "").trim(), error);
     }
   }
 

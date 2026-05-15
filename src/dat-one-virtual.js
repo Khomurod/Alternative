@@ -15,6 +15,7 @@ import {
   resolveDisplayRpm,
   sanitizeLocationText
 } from "./parsers.js";
+import { extractLanePickupDeliveryFromDatRow } from "./route-icon-directions.js";
 import { DAT_EXT_GRID_ROW_MARK as ROW_MARK, buildRowDecorationStateKey, isActiveTargets } from "./row-deco-key.js";
 
 const VIEWPORT_SELECTORS = [
@@ -149,24 +150,9 @@ function finalizeSummary(summary) {
 }
 
 export function parseDatOneVirtualRow(row) {
-  const route = row.querySelector("dat-route");
-  const routeCell = row.querySelector('[data-test="load-origin-cell"]')?.closest(".route-dh-container") ?? route;
-
-  const origin = sanitizeLocationText(
-    routeCell?.querySelector('[data-test="load-origin-cell"]')?.textContent ??
-      route?.querySelector(".route-dh-container-lg .origin .extended-trip-point")?.textContent ??
-      route?.querySelector(".origin .extended-trip-point")?.textContent ??
-      route?.querySelector(".origin span")?.textContent ??
-      ""
-  );
-
-  const destination = sanitizeLocationText(
-    routeCell?.querySelector('[data-test="load-destination-cell"]')?.textContent ??
-      route?.querySelector(".route-dh-container-lg .destination .extended-trip-point")?.textContent ??
-      route?.querySelector(".destination .extended-trip-point")?.textContent ??
-      route?.querySelector(".destination span")?.textContent ??
-      ""
-  );
+  const lane = extractLanePickupDeliveryFromDatRow(row);
+  const origin = lane?.pickup ?? "";
+  const destination = lane?.delivery ?? "";
 
   const rateCell =
     row.querySelector('[data-test="load-rate-cell"]') ??

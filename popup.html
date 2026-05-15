@@ -81,7 +81,17 @@
         margin: 8px 0 0 28px;
         font-size: 12px;
       }
-      input[type="password"] {
+      #msg.msg--error {
+        color: #b42318;
+      }
+      #test-tollguru {
+        margin-top: 10px;
+        background: #fff;
+        color: #0b66ff;
+      }
+      #test-tollguru:hover {
+        filter: brightness(0.98);
+      }
         width: 100%;
         box-sizing: border-box;
         padding: 8px;
@@ -110,7 +120,7 @@
       <p class="hint small">Enabled by default. Uncheck and save to turn it off. Reload DAT tabs after toggling.</p>
     </div>
     <div class="feature-block">
-      <label for="tollguru-key">TollGuru API key (optional)</label>
+      <label for="tollguru-key">TollGuru API key</label>
       <input
         id="tollguru-key"
         type="password"
@@ -120,8 +130,16 @@
         placeholder="tg_…"
       />
       <p class="hint small">
-        Stored only in this browser for truck toll estimates on routes. Not sent to DAT. Reload DAT tabs after saving.
+        Required for truck toll estimates. Stored only in this browser. Not sent to DAT. Reload DAT tabs after saving.
       </p>
+      <label class="row" style="margin-top: 12px">
+        <input type="checkbox" id="google-toll-fallback" />
+        <span>Allow Google Routes toll estimate when TollGuru fails or has no result</span>
+      </label>
+      <p class="hint small">
+        Turn off to show only TollGuru truck tolls (or “unavailable” with the error reason). When on, errors from TollGuru appear in the subtitle and route notes.
+      </p>
+      <button id="test-tollguru" type="button">Test TollGuru API</button>
     </div>
     <div id="msg" aria-live="polite"></div>
     <script type="module" src="popup.js"></script>
