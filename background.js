@@ -52,6 +52,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === "dat-ext:gmail-threads-list") {
+    handleGmailThreadsList(message)
+      .then((result) => sendResponse(result))
+      .catch((error) => {
+        const msg = String(error?.message || error || "Gmail threads failed");
+        if (isOAuthCancelled(msg)) {
+          sendResponse({ ok: false, cancelled: true, error: msg });
+          return;
+        }
+        sendResponse({ ok: false, error: msg });
+      });
+    return true;
+  }
+
   if (message?.type === "dat-ext:test-tollguru") {
     handleTestTollguru(message)
       .then((result) => sendResponse({ ok: true, ...result }))
@@ -187,6 +201,103 @@ async function handleGmailSend(message) {
   const id = typeof data?.id === "string" ? data.id : undefined;
 
   return { ok: true, id };
+}
+
+const GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1/";
+
+/**
+ * Authenticated Gmail JSON request (service worker only).
+ *
+ * @param {"GET"|"POST"} method
+ * @param {string} pathAndQuery path after /v1/ including query string
+ */
+async function gmailAuthenticatedJson(method, pathAndQuery) {
+  const urlStr = `${GMAIL_API_BASE}${pathAndQuery}`;
+  validateFetchUrl(urlStr);
+
+  /** @type {string | undefined} */
+  let token;
+  try {
+    token = await getAuthToken({ interactive: false });
+  } catch {
+    token = await getAuthToken({ interactive: true });
+  }
+
+  async function req(t) {
+    return fetch(urlStr, {
+      method,
+      headers: {
+        Authorization: `Bearer ${t}`,
+        Accept: "application/json"
+      }
+    });
+  }
+
+  let response = await req(token);
+
+  if (response.status === 401) {
+    await removeCachedToken(token);
+    token = await getAuthTokenInteractive();
+    response = await req(token);
+  }
+
+  if (!response.ok) {
+    const detail = await readFailedFetchDetail(response.status, response);
+    throw new Error(detail.replace(/^HTTP \d+/, "Gmail request failed"));
+  }
+
+  return response.json();
+}
+
+/**
+ * @param {*} data
+ * @returns {{ id: string, snippet: string, historyId?: string }[]}
+ */
+function sanitizeThreadsForUi(data) {
+  const threads = Array.isArray(data?.threads) ? data.threads : [];
+  const out = [];
+  for (const t of threads) {
+    const id = typeof t?.id === "string" ? t.id.trim() : "";
+    if (!id) {
+      continue;
+    }
+    const snippet = typeof t?.snippet === "string" ? t.snippet.replace(/\s+/g, " ").trim().slice(0, 280) : "";
+    const historyId = typeof t?.historyId === "string" ? t.historyId : undefined;
+    out.push({ id, snippet, ...(historyId ? { historyId } : {}) });
+  }
+  return out;
+}
+
+/**
+ * @param {*} message
+ * @returns {Promise<{ ok: true, threads: ReturnType<typeof sanitizeThreadsForUi>, resultSizeEstimate?: number }>}
+ */
+async function handleGmailThreadsList(message) {
+  const maxRaw = Number(message?.maxResults);
+  const maxResults = Math.min(25, Math.max(1, Number.isFinite(maxRaw) ? maxRaw : 10));
+
+  const contactEmail = String(message?.contactEmail || "")
+    .trim()
+    .slice(0, 254);
+  let q = String(message?.query || "").trim();
+
+  if (!q) {
+    q = contactEmail ? `(from:${contactEmail} OR to:${contactEmail})` : "newer_than:14d";
+  }
+
+  const params = new URLSearchParams({
+    maxResults: String(maxResults),
+    q
+  });
+
+  const data = await gmailAuthenticatedJson("GET", `users/me/threads?${params.toString()}`);
+  const threads = sanitizeThreadsForUi(data);
+  const estimate =
+    typeof data?.resultSizeEstimate === "number" && Number.isFinite(data.resultSizeEstimate)
+      ? data.resultSizeEstimate
+      : undefined;
+
+  return { ok: true, threads, ...(estimate !== undefined ? { resultSizeEstimate: estimate } : {}) };
 }
 
 /**

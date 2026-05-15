@@ -1,4 +1,5 @@
 import { interpolateEmailTemplate } from "./email-template.js";
+import { openDatExtGmailDrawer } from "./gmail-drawer.js";
 import { pickGmailComposeOrMailto } from "./gmail-compose.js";
 import { destroyLaneMap, mountLaneMap } from "./numeo-map.js";
 import { resolveDetailPanelRpm } from "./parsers.js";
@@ -585,59 +586,22 @@ function buildMailto(email, subject, body) {
 }
 
 /**
- * @param {HTMLElement | null | undefined} shadowHost
- * @param {string} message
- * @param {"success" | "error"} variant
+ * Plain-text snapshot appended above template body inside the Gmail drawer.
+ *
+ * @param {*} data load detail row data
  */
-function showAssistToast(shadowHost, message, variant = "success") {
-  const root = shadowHost?.shadowRoot;
-  if (!root || !message) {
-    return;
-  }
-  let layer = root.querySelector(".dat-ext-toast-layer");
-  if (!layer) {
-    layer = document.createElement("div");
-    layer.className = "dat-ext-toast-layer";
-    layer.setAttribute("aria-live", "polite");
-    root.appendChild(layer);
-  }
-  const t = document.createElement("div");
-  t.className = `dat-ext-toast dat-ext-toast--${variant}`;
-  t.textContent = message;
-  layer.appendChild(t);
-  globalThis.setTimeout(() => {
-    t.remove();
-    if (layer instanceof HTMLElement && !layer.childElementCount) {
-      layer.remove();
-    }
-  }, 4500);
-}
-
-/**
- * @param {string} to
- * @param {string} subject
- * @param {string} body
- */
-function sendGmailViaBackground(to, subject, body) {
-  return new Promise((resolve, reject) => {
-    const rt = globalThis.chrome?.runtime;
-    if (!rt?.sendMessage) {
-      reject(new Error("Extension messaging unavailable."));
-      return;
-    }
-    rt.sendMessage({ type: "dat-ext:gmail-send", to, subject, body }, (response) => {
-      const last = typeof chrome !== "undefined" ? chrome.runtime?.lastError : undefined;
-      if (last) {
-        reject(new Error(last.message || "Gmail send failed."));
-        return;
-      }
-      if (!response?.ok) {
-        reject(new Error(response?.error || "Gmail send failed."));
-        return;
-      }
-      resolve(response);
-    });
-  });
+function buildLoadSnapshotForEmail(data, calculatedRpm, milesForRpm, loadingRoute, rateDisplayText, tollDisplayText) {
+  const rpm = formatOptionalRpm(calculatedRpm);
+  const miles = formatOptionalMiles(milesForRpm, loadingRoute);
+  return [
+    `Origin: ${data?.origin || "—"}`,
+    `Destination: ${data?.destination || "—"}`,
+    `Company: ${data?.companyName || "—"}`,
+    `RPM: ${rpm}`,
+    `Miles: ${miles}`,
+    `Rate $: ${rateDisplayText}`,
+    `Toll: ${tollDisplayText}`
+  ].join("\n");
 }
 
 function defaultOfferBody(data) {
@@ -813,22 +777,33 @@ export function renderColumn(card, ctx) {
     dataRole: "offer-email"
   });
   if (data.contactEmail && !offerSend.disabled) {
-    offerSend.addEventListener("click", async () => {
-      offerSend.disabled = true;
-      offerSend.setAttribute("aria-disabled", "true");
-      try {
-        if (!globalThis.chrome?.runtime?.sendMessage) {
-          window.location.href = buildMailto(data.contactEmail, offerSubject, offerBody);
-          return;
-        }
-        await sendGmailViaBackground(data.contactEmail, offerSubject, offerBody);
-        showAssistToast(shadowHost, "Offer email sent.", "success");
-      } catch (error) {
-        showAssistToast(shadowHost, String(error?.message || error || "Send failed."), "error");
-      } finally {
-        offerSend.disabled = false;
-        offerSend.removeAttribute("aria-disabled");
+    offerSend.addEventListener("click", () => {
+      if (!globalThis.chrome?.runtime?.sendMessage) {
+        window.location.href = buildMailto(data.contactEmail, offerSubject, offerBody);
+        return;
       }
+      const rateLabel = hasPostedRate
+        ? formatMoney(data.rateDollars)
+        : formatUserRateInputValue(shadowHost?.__datExtUserRate) || "—";
+      const tollLine = tollMainLineDisplay(route?.tollStatus, route?.tollSource, loadingRoute);
+      const snapshot = buildLoadSnapshotForEmail(data, calculatedRpm, milesForRpm, loadingRoute, rateLabel, tollLine);
+      openDatExtGmailDrawer({
+        mode: "offer",
+        contactEmail: data.contactEmail,
+        subject: offerSubject,
+        body: `${snapshot}\n\n${offerBody}`.trim(),
+        chips: {
+          origin: data.origin,
+          destination: data.destination,
+          company: data.companyName,
+          rpm: formatOptionalRpm(calculatedRpm),
+          miles: formatOptionalMiles(milesForRpm, loadingRoute),
+          rate: rateLabel,
+          toll: tollLine
+        },
+        shadowHost: shadowHost ?? null,
+        userAccountEmail: senderEmail
+      });
     });
   }
 
@@ -837,22 +812,33 @@ export function renderColumn(card, ctx) {
     dataRole: "booking-email"
   });
   if (data.contactEmail && !bookingSend.disabled) {
-    bookingSend.addEventListener("click", async () => {
-      bookingSend.disabled = true;
-      bookingSend.setAttribute("aria-disabled", "true");
-      try {
-        if (!globalThis.chrome?.runtime?.sendMessage) {
-          window.location.href = buildMailto(data.contactEmail, bookingSubject, bookingBody);
-          return;
-        }
-        await sendGmailViaBackground(data.contactEmail, bookingSubject, bookingBody);
-        showAssistToast(shadowHost, "Booking email sent.", "success");
-      } catch (error) {
-        showAssistToast(shadowHost, String(error?.message || error || "Send failed."), "error");
-      } finally {
-        bookingSend.disabled = false;
-        bookingSend.removeAttribute("aria-disabled");
+    bookingSend.addEventListener("click", () => {
+      if (!globalThis.chrome?.runtime?.sendMessage) {
+        window.location.href = buildMailto(data.contactEmail, bookingSubject, bookingBody);
+        return;
       }
+      const rateLabel = hasPostedRate
+        ? formatMoney(data.rateDollars)
+        : formatUserRateInputValue(shadowHost?.__datExtUserRate) || "—";
+      const tollLine = tollMainLineDisplay(route?.tollStatus, route?.tollSource, loadingRoute);
+      const snapshot = buildLoadSnapshotForEmail(data, calculatedRpm, milesForRpm, loadingRoute, rateLabel, tollLine);
+      openDatExtGmailDrawer({
+        mode: "booking",
+        contactEmail: data.contactEmail,
+        subject: bookingSubject,
+        body: `${snapshot}\n\n${bookingBody}`.trim(),
+        chips: {
+          origin: data.origin,
+          destination: data.destination,
+          company: data.companyName,
+          rpm: formatOptionalRpm(calculatedRpm),
+          miles: formatOptionalMiles(milesForRpm, loadingRoute),
+          rate: rateLabel,
+          toll: tollLine
+        },
+        shadowHost: shadowHost ?? null,
+        userAccountEmail: senderEmail
+      });
     });
   }
 

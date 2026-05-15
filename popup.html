@@ -97,10 +97,10 @@
   <body>
     <h1>DAT Dispatcher Assist</h1>
     <p class="hint">
-      <strong>Gmail send from the board:</strong> after this update Chrome will ask again for OAuth. The narrow
-      <code>gmail.send</code>
-      permission is required, and <strong>Gmail API</strong> must be enabled on the OAuth client project in Google
-      Cloud Console. If send fails, use “Open … in Gmail” as a fallback.
+      <strong>Gmail from the board:</strong> Chrome will ask again for OAuth after updates. This extension requests
+      <code>gmail.send</code> (outbound mail) and <code>gmail.readonly</code> (recent thread snippets in the side
+      drawer only). Enable the <strong>Gmail API</strong> on your OAuth client’s Google Cloud project. If the API fails,
+      use “Open … in Gmail” as a fallback.
     </p>
     <p class="hint">
       Optional email bodies for the load detail buttons. Leave blank to use built-in text. Placeholders:

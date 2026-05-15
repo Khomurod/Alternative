@@ -1,3 +1,4 @@
+import { configureDatExtGmailDrawer } from "./gmail-drawer.js";
 import { enhanceLoadDetails } from "./detail-panel.js";
 import { buildGoogleDirectionsUrlForPin, buildGoogleDirectionsUrlForRow } from "./directions-from-row.js";
 import { EMAIL_BOOKING_TEMPLATE_KEY, EMAIL_OFFER_TEMPLATE_KEY } from "./email-template.js";
@@ -81,6 +82,7 @@ function bootstrap() {
   }
 
   window.__datDispatcherAssistInitialized = true;
+  configureDatExtGmailDrawer({ onRequestGoogleLogin: requestGoogleLogin });
   rebuildRouteInspector();
   loadNumeoColumnPreference();
   loadRouteEconomicsPreferencesFromChrome();
