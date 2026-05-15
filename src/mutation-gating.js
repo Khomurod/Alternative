@@ -71,3 +71,71 @@ export function shouldScheduleScanFromMutations(mutations, config) {
 
   return false;
 }
+
+/**
+ * Narrow DOM scans to the subtree that triggered a mutation (virtual row, viewport, or detail host).
+ *
+ * @param {MutationRecord[]} mutations
+ * @returns {HTMLElement | null}
+ */
+export function resolveScanScopeFromMutations(mutations) {
+  for (const mutation of mutations) {
+    const scopeFromTarget = resolveScanScopeFromNode(mutation.target);
+    if (scopeFromTarget) {
+      return scopeFromTarget;
+    }
+
+    for (const node of mutation.addedNodes) {
+      const scopeFromAdded = resolveScanScopeFromNode(node);
+      if (scopeFromAdded) {
+        return scopeFromAdded;
+      }
+    }
+
+    for (const node of mutation.removedNodes) {
+      const scopeFromRemoved = resolveScanScopeFromNode(node);
+      if (scopeFromRemoved) {
+        return scopeFromRemoved;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * @param {Node | null | undefined} node
+ * @returns {HTMLElement | null}
+ */
+function resolveScanScopeFromNode(node) {
+  if (!(node instanceof Element)) {
+    return null;
+  }
+
+  if (node instanceof HTMLElement && node.matches("dat-load-details")) {
+    return node;
+  }
+
+  const rowContainer = node.closest(".row-container");
+  if (rowContainer instanceof HTMLElement) {
+    return rowContainer;
+  }
+
+  const viewport = node.closest(
+    "#table-viewport, cdk-virtual-scroll-viewport, [data-test='results-table-body']"
+  );
+  if (viewport instanceof HTMLElement) {
+    return viewport;
+  }
+
+  if (
+    node instanceof HTMLElement &&
+    (node.classList.contains(CDK_CONTENT_WRAPPER) ||
+      node.id === "table-viewport" ||
+      node.matches("cdk-virtual-scroll-viewport"))
+  ) {
+    return node;
+  }
+
+  return null;
+}

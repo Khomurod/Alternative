@@ -17,18 +17,60 @@ import {
 } from "./parsers.js";
 import { DAT_EXT_GRID_ROW_MARK as ROW_MARK, buildRowDecorationStateKey, isActiveTargets } from "./row-deco-key.js";
 
-export function findDatOneViewport(doc) {
-  const selectors = [
-    "#table-viewport",
-    '[data-test="results-table-body"]',
-    "cdk-virtual-scroll-viewport.table-rows-container",
-    "cdk-virtual-scroll-viewport#table-viewport"
-  ];
+const VIEWPORT_SELECTORS = [
+  "#table-viewport",
+  '[data-test="results-table-body"]',
+  "cdk-virtual-scroll-viewport.table-rows-container",
+  "cdk-virtual-scroll-viewport#table-viewport"
+];
 
-  for (const selector of selectors) {
-    const hits = queryDeepAll(doc, selector);
-    if (hits.length) {
-      return /** @type {HTMLElement} */ (hits[0]);
+/**
+ * @param {Document} doc
+ * @param {{ scope?: HTMLElement | null, allowDocumentDeepScan?: boolean }} [options]
+ * @returns {HTMLElement | null}
+ */
+export function findDatOneViewport(doc, options = {}) {
+  const { scope = null, allowDocumentDeepScan = true } = options;
+  /** @type {HTMLElement[]} */
+  const roots = [];
+
+  if (scope instanceof HTMLElement) {
+    const viewportFromScope = scope.closest(
+      "#table-viewport, cdk-virtual-scroll-viewport, [data-test='results-table-body']"
+    );
+    if (viewportFromScope instanceof HTMLElement) {
+      roots.push(viewportFromScope);
+    }
+    roots.push(scope);
+  }
+
+  if (allowDocumentDeepScan && doc?.body instanceof HTMLElement) {
+    roots.push(doc.body);
+  }
+
+  const seen = new Set();
+  for (const root of roots) {
+    if (!(root instanceof HTMLElement) || seen.has(root)) {
+      continue;
+    }
+    seen.add(root);
+
+    for (const selector of VIEWPORT_SELECTORS) {
+      try {
+        const direct = root.matches(selector) ? root : root.querySelector(selector);
+        if (direct instanceof HTMLElement) {
+          return direct;
+        }
+      } catch {
+        /* Invalid selector for this root */
+      }
+    }
+
+    for (const selector of VIEWPORT_SELECTORS) {
+      const hits = queryDeepAll(root, selector);
+      if (hits.length) {
+        return /** @type {HTMLElement} */ (hits[0]);
+      }
     }
   }
 

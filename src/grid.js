@@ -187,28 +187,67 @@ export function scoreLoadsTable(table) {
   return score;
 }
 
-export function findResultsGrid(doc) {
+/**
+ * @param {Document} doc
+ * @param {{ scope?: HTMLElement | null, allowDocumentDeepScan?: boolean }} [options]
+ * @returns {HTMLElement | HTMLTableElement | null}
+ */
+export function findResultsGrid(doc, options = {}) {
+  const { scope = null, allowDocumentDeepScan = true } = options;
+  /** @type {HTMLElement[]} */
+  const roots = [];
+
+  if (scope instanceof HTMLElement) {
+    roots.push(scope);
+  }
+
   const body = doc.body || doc.documentElement;
-  if (!body) {
+  if (allowDocumentDeepScan && body instanceof HTMLElement) {
+    roots.push(body);
+  }
+
+  if (!roots.length) {
     return null;
   }
 
   /** @type {{ score: number, surface: HTMLElement | HTMLTableElement | null }} */
   let winner = { score: 0, surface: null };
 
-  const tables = queryDeepAll(doc, "table");
-  for (const table of tables) {
-    if (!(table instanceof HTMLTableElement)) {
-      continue;
-    }
+  const seenTables = new Set();
+  for (const root of roots) {
+    for (const table of queryDeepAll(root, "table")) {
+      if (seenTables.has(table)) {
+        continue;
+      }
+      seenTables.add(table);
+      if (!(table instanceof HTMLTableElement)) {
+        continue;
+      }
 
-    const score = scoreLoadsTable(table);
-    if (score > winner.score) {
-      winner = { score, surface: table };
+      const score = scoreLoadsTable(table);
+      if (score > winner.score) {
+        winner = { score, surface: table };
+      }
     }
   }
 
-  const grids = [...new Set([...queryDeepAll(doc, '[role="grid"]'), ...queryDeepAll(doc, '[role="treegrid"]')])];
+  const seenGrids = new Set();
+  /** @type {Element[]} */
+  const grids = [];
+  for (const root of roots) {
+    for (const grid of queryDeepAll(root, '[role="grid"]')) {
+      if (!seenGrids.has(grid)) {
+        seenGrids.add(grid);
+        grids.push(grid);
+      }
+    }
+    for (const grid of queryDeepAll(root, '[role="treegrid"]')) {
+      if (!seenGrids.has(grid)) {
+        seenGrids.add(grid);
+        grids.push(grid);
+      }
+    }
+  }
 
   for (const grid of grids) {
     if (!(grid instanceof HTMLElement)) {
@@ -418,7 +457,19 @@ export function decorateAriaGrid(grid, targets, options = {}) {
 }
 
 export function scanDocumentForGrids(doc, targets, options = {}) {
-  const datViewport = findDatOneViewport(doc);
+  const {
+    scanScope = null,
+    allowDocumentDeepScan = true,
+    cachedViewport = null
+  } = options;
+
+  const viewportOptions = { scope: scanScope, allowDocumentDeepScan };
+  let datViewport =
+    cachedViewport instanceof HTMLElement && cachedViewport.isConnected ? cachedViewport : null;
+
+  if (!datViewport) {
+    datViewport = findDatOneViewport(doc, viewportOptions);
+  }
 
   if (datViewport) {
     const virtualSummary = decorateDatOneViewport(datViewport, targets, options);
@@ -428,7 +479,11 @@ export function scanDocumentForGrids(doc, targets, options = {}) {
     }
   }
 
-  const surface = findResultsGrid(doc);
+  if (!allowDocumentDeepScan && !(scanScope instanceof HTMLElement)) {
+    return emptyScanSummary();
+  }
+
+  const surface = findResultsGrid(doc, viewportOptions);
 
   if (surface instanceof HTMLTableElement) {
     return decorateLoadsTable(surface, targets, options);

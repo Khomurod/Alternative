@@ -6,7 +6,7 @@ import { DAT_EXT_TOLLGURU_API_KEY, getEffectiveTollGuruApiKey } from "./tollguru
 import { queryDeepAll } from "./dom-deep.js";
 import { findDatOneViewport } from "./dat-one-virtual.js";
 import { findResultsGrid, scanDocumentForGrids } from "./grid.js";
-import { shouldScheduleScanFromMutations } from "./mutation-gating.js";
+import { resolveScanScopeFromMutations, shouldScheduleScanFromMutations } from "./mutation-gating.js";
 import {
   injectLoadDetailDirectionAnchors,
   injectRowSummaryDirectionAnchors,
@@ -54,6 +54,8 @@ const state = {
     maxWeight: null,
     onlyMatches: false
   },
+  pendingScanScope: null,
+  cachedViewport: null,
   emailUiState: {
     selectedEmail: "",
     selectedTemplate: "default"
@@ -243,6 +245,11 @@ function startObserver() {
       return;
     }
 
+    const scope = resolveScanScopeFromMutations(mutations);
+    if (scope) {
+      state.pendingScanScope = scope;
+    }
+
     scheduleScan(false);
   });
 
@@ -261,11 +268,40 @@ function startObserver() {
 function scheduleScan(immediate) {
   window.clearTimeout(state.debounceTimer);
 
-  const run = () => {
+  const flushPendingScanScope = () => {
+    const scope = state.pendingScanScope;
+    state.pendingScanScope = null;
+    return scope;
+  };
+
+  const performDomInjection = (allowDocumentDeepScan, scanScope) => {
     try {
-      injectHeaderTools();
+      if (state.cachedViewport && !state.cachedViewport.isConnected) {
+        state.cachedViewport = null;
+      }
+
       const targets = state.appliedTargets;
-      const result = scanDocumentForGrids(document, targets, { onlyMatches: false });
+      const scanOptions = {
+        onlyMatches: false,
+        scanScope,
+        allowDocumentDeepScan,
+        cachedViewport: state.cachedViewport
+      };
+
+      injectHeaderTools();
+
+      if (!state.cachedViewport) {
+        state.cachedViewport = findDatOneViewport(document, {
+          scope: scanScope,
+          allowDocumentDeepScan
+        });
+      }
+
+      const result = scanDocumentForGrids(document, targets, {
+        ...scanOptions,
+        cachedViewport: state.cachedViewport
+      });
+
       updateSummary(result, targets);
       enhanceLoadDetails(document, {
         targets,
@@ -282,10 +318,16 @@ function scheduleScan(immediate) {
       injectLoadDetailDirectionAnchors(document);
 
       if (window.__DAT_ASSIST_DEBUG && result.rowCount === 0) {
+        const debugRoot =
+          scanScope instanceof HTMLElement
+            ? scanScope
+            : state.cachedViewport instanceof HTMLElement
+            ? state.cachedViewport
+            : document.body;
         console.info("[DAT Dispatcher Assist] diagnostics", {
-          deepTables: queryDeepAll(document, "table").length,
-          deepGrids: queryDeepAll(document, '[role="grid"]').length,
-          treeGrids: queryDeepAll(document, '[role="treegrid"]').length,
+          deepTables: debugRoot ? queryDeepAll(debugRoot, "table").length : 0,
+          deepGrids: debugRoot ? queryDeepAll(debugRoot, '[role="grid"]').length : 0,
+          treeGrids: debugRoot ? queryDeepAll(debugRoot, '[role="treegrid"]').length : 0,
           host: window.location.href
         });
       }
@@ -294,12 +336,18 @@ function scheduleScan(immediate) {
     }
   };
 
+  const queueDomInjectionFrame = (allowDocumentDeepScan, scanScope) => {
+    window.requestAnimationFrame(() => performDomInjection(allowDocumentDeepScan, scanScope));
+  };
+
   if (immediate) {
-    window.requestAnimationFrame(run);
+    queueDomInjectionFrame(true, flushPendingScanScope());
     return;
   }
 
-  state.debounceTimer = window.setTimeout(() => window.requestAnimationFrame(run), 160);
+  state.debounceTimer = window.setTimeout(() => {
+    queueDomInjectionFrame(false, flushPendingScanScope());
+  }, 160);
 }
 
 function readStoredPrefs() {

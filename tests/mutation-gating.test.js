@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { shouldScheduleScanFromMutations } from "../src/mutation-gating.js";
+import { resolveScanScopeFromMutations, shouldScheduleScanFromMutations } from "../src/mutation-gating.js";
 
 const cfg = { injectedFlag: "dat-ext-injected", rootClass: "dat-ext-root" };
 
@@ -49,5 +49,24 @@ describe("shouldScheduleScanFromMutations", () => {
     div.className = "native-row";
     const mutations = [{ type: "childList", addedNodes: [], removedNodes: [div] }];
     expect(shouldScheduleScanFromMutations(mutations, cfg)).toBe(true);
+  });
+});
+
+describe("resolveScanScopeFromMutations", () => {
+  it("returns the nearest row-container for row mutations", () => {
+    const row = document.createElement("div");
+    row.className = "row-container";
+    const cell = document.createElement("div");
+    cell.className = "table-cell cell-rate";
+    row.appendChild(cell);
+
+    const mutations = [{ type: "attributes", attributeName: "class", target: cell }];
+    expect(resolveScanScopeFromMutations(mutations)).toBe(row);
+  });
+
+  it("returns dat-load-details when the detail host changes", () => {
+    const detail = document.createElement("dat-load-details");
+    const mutations = [{ type: "attributes", attributeName: "aria-expanded", target: detail }];
+    expect(resolveScanScopeFromMutations(mutations)).toBe(detail);
   });
 });

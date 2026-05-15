@@ -1,3 +1,5 @@
+import { validateFetchUrl } from "./src/fetch-url-guard.js";
+
 chrome.runtime.onInstalled.addListener((details) => {
   console.info("[DAT Dispatcher Assist] Extension installed:", details.reason);
 });
@@ -19,20 +21,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-const ALLOWED_FETCH_ORIGINS = new Set([
-  "https://photon.komoot.io",
-  "https://router.project-osrm.org",
-  "https://nominatim.openstreetmap.org",
-  "https://routes.googleapis.com",
-  "https://apis.tollguru.com"
-]);
-
 async function handleFetchJson(message) {
-  const rawUrl = String(message?.url || "");
-  const url = new URL(rawUrl);
-  if (!ALLOWED_FETCH_ORIGINS.has(url.origin)) {
-    throw new Error(`Origin not allowed: ${url.origin}`);
-  }
+  const url = validateFetchUrl(message?.url);
 
   const method = String(message?.method || "GET").toUpperCase();
   if (!["GET", "POST"].includes(method)) {

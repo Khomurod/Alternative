@@ -11108,27 +11108,53 @@
 
   // src/detail-panel.js
   var TOM_HOST_DATASET = "datExtTomHost";
-  var SHADOW_STYLES = `
+  var DEFAULT_CELL_TYPOGRAPHY = {
+    fontFamily: '"Sequel Sans", Helvetica, Arial, sans-serif',
+    fontSize: "12px",
+    color: "#101828",
+    lineHeight: "1.25"
+  };
+  function readDatNativeCellTypography(doc) {
+    if (!doc?.querySelector) {
+      return { ...DEFAULT_CELL_TYPOGRAPHY };
+    }
+    const ref = doc.querySelector(".cell-rate, [data-test='load-rate-cell']") || doc.querySelector(".cell-trip, [data-test='load-trip-cell']");
+    if (!(ref instanceof HTMLElement)) {
+      return { ...DEFAULT_CELL_TYPOGRAPHY };
+    }
+    const computed = window.getComputedStyle(ref);
+    return {
+      fontFamily: computed.fontFamily || DEFAULT_CELL_TYPOGRAPHY.fontFamily,
+      fontSize: computed.fontSize || DEFAULT_CELL_TYPOGRAPHY.fontSize,
+      color: computed.color || DEFAULT_CELL_TYPOGRAPHY.color,
+      lineHeight: computed.lineHeight || DEFAULT_CELL_TYPOGRAPHY.lineHeight
+    };
+  }
+  function buildShadowStyles(typography, compactColumn) {
+    return `
 :host {
   all: initial;
-  display: block;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   width: 100%;
-  font-family: "Sequel Sans", Helvetica, Arial, sans-serif;
-  color: #101828;
+  min-width: 0;
+  font-family: ${typography.fontFamily};
+  font-size: ${typography.fontSize};
+  color: ${typography.color};
+  line-height: ${typography.lineHeight};
   box-sizing: border-box;
 }
 *, *::before, *::after { box-sizing: border-box; }
 
 .card {
   width: 100%;
-  border: 1px solid #dfe3ea;
-  border-radius: 6px;
-  background: #ffffff;
-  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: ${compactColumn ? "6px" : "10px"};
   overflow: hidden;
+  min-width: 0;
+  ${compactColumn ? "border: none; border-radius: 0; background: transparent; padding: 0;" : "border: 1px solid #dfe3ea; border-radius: 6px; background: #ffffff; padding: 10px;"}
 }
 
 .panel-header {
@@ -11140,9 +11166,9 @@
 }
 
 .title {
-  font-size: 12px;
+  font-size: inherit;
   font-weight: 700;
-  color: #1d2939;
+  color: inherit;
   letter-spacing: 0;
   white-space: nowrap;
 }
@@ -11219,22 +11245,23 @@
 }
 
 .metric-label {
-  font-size: 10px;
+  font-size: 0.85em;
   font-weight: 700;
-  color: #5a6880;
+  color: inherit;
+  opacity: 0.72;
   letter-spacing: 0.02em;
 }
 
 .metric-input {
-  height: 34px;
+  height: ${compactColumn ? "28px" : "34px"};
   width: 100%;
-  border: 1px solid #d3dae7;
-  border-radius: 4px;
-  background: #ffffff;
-  color: #17253a;
-  font-size: 13px;
+  border: 1px solid ${compactColumn ? "transparent" : "#d3dae7"};
+  border-radius: ${compactColumn ? "0" : "4px"};
+  background: ${compactColumn ? "transparent" : "#ffffff"};
+  color: inherit;
+  font-size: inherit;
   font-weight: 600;
-  padding: 0 10px;
+  padding: 0 ${compactColumn ? "2px" : "10px"};
   font-family: inherit;
   outline: none;
 }
@@ -11243,34 +11270,34 @@
   box-shadow: 0 0 0 2px rgba(78, 121, 255, 0.14);
 }
 .metric-input[readonly] {
-  background: #fbfcff;
-  color: #283a57;
+  background: ${compactColumn ? "transparent" : "#fbfcff"};
+  color: inherit;
 }
 
 .metric-value {
-  height: 34px;
+  height: ${compactColumn ? "28px" : "34px"};
   width: 100%;
-  border: 1px solid #d3dae7;
-  border-radius: 4px;
-  background: #fbfcff;
-  color: #253857;
-  font-size: 13px;
+  border: 1px solid ${compactColumn ? "transparent" : "#d3dae7"};
+  border-radius: ${compactColumn ? "0" : "4px"};
+  background: ${compactColumn ? "transparent" : "#fbfcff"};
+  color: inherit;
+  font-size: inherit;
   font-weight: 600;
   display: inline-flex;
   align-items: center;
-  padding: 0 10px;
+  padding: 0 ${compactColumn ? "2px" : "10px"};
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .map-wrap {
-  border: 1px solid #e6ebf4;
-  border-radius: 6px;
+  border: ${compactColumn ? "none" : "1px solid #e6ebf4"};
+  border-radius: ${compactColumn ? "0" : "6px"};
   overflow: hidden;
-  background: #f8faff;
+  background: ${compactColumn ? "transparent" : "#f8faff"};
   width: 100%;
-  max-width: 360px;
+  max-width: ${compactColumn ? "100%" : "360px"};
 }
 
 .map-canvas {
@@ -11299,8 +11326,24 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 11px;
-  color: #5a6880;
+  font-size: 0.92em;
+  color: inherit;
+  opacity: 0.72;
+}
+
+.card--grid-cell .panel-header,
+.card--grid-cell .actions {
+  display: none;
+}
+
+.card--grid-cell .metrics-row {
+  grid-template-columns: repeat(2, minmax(64px, 1fr));
+  gap: 4px 8px;
+}
+
+.card--grid-cell .map-wrap,
+.card--grid-cell .notes {
+  display: none;
 }
 
 @media (max-width: 980px) {
@@ -11322,6 +11365,7 @@
   }
 }
 `;
+  }
   function visibleText(element) {
     return String(element?.innerText || element?.textContent || "").replace(/\s+/g, " ").trim();
   }
@@ -11571,13 +11615,15 @@ I would like to discuss booking the load from ${data.origin || "Origin"} to ${da
 
 Thank you.`;
   }
-  function buildShadowTree(shadow) {
+  function buildShadowTree(shadow, options = {}) {
+    const { compactColumn = false } = options;
+    const typography = readDatNativeCellTypography(document);
     shadow.innerHTML = "";
     const style = document.createElement("style");
-    style.textContent = SHADOW_STYLES;
+    style.textContent = buildShadowStyles(typography, compactColumn);
     shadow.appendChild(style);
     const card = document.createElement("section");
-    card.className = "card";
+    card.className = compactColumn ? "card card--grid-cell" : "card";
     card.setAttribute("data-role", "tom-load-intelligence");
     shadow.appendChild(card);
     return card;
@@ -11785,13 +11831,16 @@ Thank you.`;
     if (mode === "column-before") {
       const column2 = document.createElement("div");
       column2.className = `details-column ${TOM_COLUMN_CLASS} dat-ext-injected`;
+      column2.style.display = "flex";
+      column2.style.flexDirection = "column";
+      column2.style.justifyContent = "center";
       column2.style.flex = "1 1 0";
-      column2.style.minWidth = "min(100%, 360px)";
+      column2.style.minWidth = "0";
       const host2 = document.createElement("section");
       host2.className = TOM_PANEL_CLASS;
       host2.dataset[TOM_HOST_DATASET] = "1";
       host2.attachShadow({ mode: "open" });
-      buildShadowTree(host2.shadowRoot);
+      buildShadowTree(host2.shadowRoot, { compactColumn: true });
       column2.appendChild(host2);
       return { wrapper: column2, host: host2 };
     }
@@ -11804,7 +11853,7 @@ Thank you.`;
     host.className = TOM_PANEL_CLASS;
     host.dataset[TOM_HOST_DATASET] = "1";
     host.attachShadow({ mode: "open" });
-    buildShadowTree(host.shadowRoot);
+    buildShadowTree(host.shadowRoot, { compactColumn: false });
     column.appendChild(host);
     return { wrapper: row, host };
   }
@@ -12102,20 +12151,50 @@ Thank you.`;
   }
 
   // src/dat-one-virtual.js
-  function findDatOneViewport(doc) {
-    const selectors = [
-      "#table-viewport",
-      '[data-test="results-table-body"]',
-      "cdk-virtual-scroll-viewport.table-rows-container",
-      "cdk-virtual-scroll-viewport#table-viewport"
-    ];
-    for (const selector of selectors) {
-      const hits = queryDeepAll(doc, selector);
-      if (hits.length) {
-        return (
-          /** @type {HTMLElement} */
-          hits[0]
-        );
+  var VIEWPORT_SELECTORS = [
+    "#table-viewport",
+    '[data-test="results-table-body"]',
+    "cdk-virtual-scroll-viewport.table-rows-container",
+    "cdk-virtual-scroll-viewport#table-viewport"
+  ];
+  function findDatOneViewport(doc, options = {}) {
+    const { scope = null, allowDocumentDeepScan = true } = options;
+    const roots = [];
+    if (scope instanceof HTMLElement) {
+      const viewportFromScope = scope.closest(
+        "#table-viewport, cdk-virtual-scroll-viewport, [data-test='results-table-body']"
+      );
+      if (viewportFromScope instanceof HTMLElement) {
+        roots.push(viewportFromScope);
+      }
+      roots.push(scope);
+    }
+    if (allowDocumentDeepScan && doc?.body instanceof HTMLElement) {
+      roots.push(doc.body);
+    }
+    const seen = /* @__PURE__ */ new Set();
+    for (const root of roots) {
+      if (!(root instanceof HTMLElement) || seen.has(root)) {
+        continue;
+      }
+      seen.add(root);
+      for (const selector of VIEWPORT_SELECTORS) {
+        try {
+          const direct = root.matches(selector) ? root : root.querySelector(selector);
+          if (direct instanceof HTMLElement) {
+            return direct;
+          }
+        } catch {
+        }
+      }
+      for (const selector of VIEWPORT_SELECTORS) {
+        const hits = queryDeepAll(root, selector);
+        if (hits.length) {
+          return (
+            /** @type {HTMLElement} */
+            hits[0]
+          );
+        }
       }
     }
     return null;
@@ -12428,23 +12507,52 @@ Thank you.`;
     }
     return score;
   }
-  function findResultsGrid(doc) {
+  function findResultsGrid(doc, options = {}) {
+    const { scope = null, allowDocumentDeepScan = true } = options;
+    const roots = [];
+    if (scope instanceof HTMLElement) {
+      roots.push(scope);
+    }
     const body = doc.body || doc.documentElement;
-    if (!body) {
+    if (allowDocumentDeepScan && body instanceof HTMLElement) {
+      roots.push(body);
+    }
+    if (!roots.length) {
       return null;
     }
     let winner = { score: 0, surface: null };
-    const tables = queryDeepAll(doc, "table");
-    for (const table of tables) {
-      if (!(table instanceof HTMLTableElement)) {
-        continue;
-      }
-      const score = scoreLoadsTable(table);
-      if (score > winner.score) {
-        winner = { score, surface: table };
+    const seenTables = /* @__PURE__ */ new Set();
+    for (const root of roots) {
+      for (const table of queryDeepAll(root, "table")) {
+        if (seenTables.has(table)) {
+          continue;
+        }
+        seenTables.add(table);
+        if (!(table instanceof HTMLTableElement)) {
+          continue;
+        }
+        const score = scoreLoadsTable(table);
+        if (score > winner.score) {
+          winner = { score, surface: table };
+        }
       }
     }
-    const grids = [.../* @__PURE__ */ new Set([...queryDeepAll(doc, '[role="grid"]'), ...queryDeepAll(doc, '[role="treegrid"]')])];
+    const seenGrids = /* @__PURE__ */ new Set();
+    const grids = [];
+    for (const root of roots) {
+      for (const grid of queryDeepAll(root, '[role="grid"]')) {
+        if (!seenGrids.has(grid)) {
+          seenGrids.add(grid);
+          grids.push(grid);
+        }
+      }
+      for (const grid of queryDeepAll(root, '[role="treegrid"]')) {
+        if (!seenGrids.has(grid)) {
+          seenGrids.add(grid);
+          grids.push(grid);
+        }
+      }
+    }
     for (const grid of grids) {
       if (!(grid instanceof HTMLElement)) {
         continue;
@@ -12607,14 +12715,26 @@ Thank you.`;
     return finalizeSummary2(summary);
   }
   function scanDocumentForGrids(doc, targets, options = {}) {
-    const datViewport = findDatOneViewport(doc);
+    const {
+      scanScope = null,
+      allowDocumentDeepScan = true,
+      cachedViewport = null
+    } = options;
+    const viewportOptions = { scope: scanScope, allowDocumentDeepScan };
+    let datViewport = cachedViewport instanceof HTMLElement && cachedViewport.isConnected ? cachedViewport : null;
+    if (!datViewport) {
+      datViewport = findDatOneViewport(doc, viewportOptions);
+    }
     if (datViewport) {
       const virtualSummary = decorateDatOneViewport(datViewport, targets, options);
       if (virtualSummary.rowCount > 0) {
         return virtualSummary;
       }
     }
-    const surface = findResultsGrid(doc);
+    if (!allowDocumentDeepScan && !(scanScope instanceof HTMLElement)) {
+      return emptyScanSummary();
+    }
+    const surface = findResultsGrid(doc, viewportOptions);
     if (surface instanceof HTMLTableElement) {
       return decorateLoadsTable(surface, targets, options);
     }
@@ -12673,6 +12793,49 @@ Thank you.`;
       }
     }
     return false;
+  }
+  function resolveScanScopeFromMutations(mutations) {
+    for (const mutation of mutations) {
+      const scopeFromTarget = resolveScanScopeFromNode(mutation.target);
+      if (scopeFromTarget) {
+        return scopeFromTarget;
+      }
+      for (const node of mutation.addedNodes) {
+        const scopeFromAdded = resolveScanScopeFromNode(node);
+        if (scopeFromAdded) {
+          return scopeFromAdded;
+        }
+      }
+      for (const node of mutation.removedNodes) {
+        const scopeFromRemoved = resolveScanScopeFromNode(node);
+        if (scopeFromRemoved) {
+          return scopeFromRemoved;
+        }
+      }
+    }
+    return null;
+  }
+  function resolveScanScopeFromNode(node) {
+    if (!(node instanceof Element)) {
+      return null;
+    }
+    if (node instanceof HTMLElement && node.matches("dat-load-details")) {
+      return node;
+    }
+    const rowContainer = node.closest(".row-container");
+    if (rowContainer instanceof HTMLElement) {
+      return rowContainer;
+    }
+    const viewport = node.closest(
+      "#table-viewport, cdk-virtual-scroll-viewport, [data-test='results-table-body']"
+    );
+    if (viewport instanceof HTMLElement) {
+      return viewport;
+    }
+    if (node instanceof HTMLElement && (node.classList.contains(CDK_CONTENT_WRAPPER) || node.id === "table-viewport" || node.matches("cdk-virtual-scroll-viewport"))) {
+      return node;
+    }
+    return null;
   }
 
   // src/row-summary-directions.js
@@ -12786,6 +12949,8 @@ Thank you.`;
       maxWeight: null,
       onlyMatches: false
     },
+    pendingScanScope: null,
+    cachedViewport: null,
     emailUiState: {
       selectedEmail: "",
       selectedTemplate: "default"
@@ -12938,6 +13103,10 @@ Thank you.`;
       })) {
         return;
       }
+      const scope = resolveScanScopeFromMutations(mutations);
+      if (scope) {
+        state.pendingScanScope = scope;
+      }
       scheduleScan(false);
     });
     state.observer.observe(document.body, {
@@ -12952,11 +13121,34 @@ Thank you.`;
   }
   function scheduleScan(immediate) {
     window.clearTimeout(state.debounceTimer);
-    const run = () => {
+    const flushPendingScanScope = () => {
+      const scope = state.pendingScanScope;
+      state.pendingScanScope = null;
+      return scope;
+    };
+    const performDomInjection = (allowDocumentDeepScan, scanScope) => {
       try {
-        injectHeaderTools();
+        if (state.cachedViewport && !state.cachedViewport.isConnected) {
+          state.cachedViewport = null;
+        }
         const targets = state.appliedTargets;
-        const result = scanDocumentForGrids(document, targets, { onlyMatches: false });
+        const scanOptions = {
+          onlyMatches: false,
+          scanScope,
+          allowDocumentDeepScan,
+          cachedViewport: state.cachedViewport
+        };
+        injectHeaderTools();
+        if (!state.cachedViewport) {
+          state.cachedViewport = findDatOneViewport(document, {
+            scope: scanScope,
+            allowDocumentDeepScan
+          });
+        }
+        const result = scanDocumentForGrids(document, targets, {
+          ...scanOptions,
+          cachedViewport: state.cachedViewport
+        });
         updateSummary(result, targets);
         enhanceLoadDetails(document, {
           targets,
@@ -12971,10 +13163,11 @@ Thank you.`;
         injectRowSummaryDirectionAnchors(document);
         injectLoadDetailDirectionAnchors(document);
         if (window.__DAT_ASSIST_DEBUG && result.rowCount === 0) {
+          const debugRoot = scanScope instanceof HTMLElement ? scanScope : state.cachedViewport instanceof HTMLElement ? state.cachedViewport : document.body;
           console.info("[DAT Dispatcher Assist] diagnostics", {
-            deepTables: queryDeepAll(document, "table").length,
-            deepGrids: queryDeepAll(document, '[role="grid"]').length,
-            treeGrids: queryDeepAll(document, '[role="treegrid"]').length,
+            deepTables: debugRoot ? queryDeepAll(debugRoot, "table").length : 0,
+            deepGrids: debugRoot ? queryDeepAll(debugRoot, '[role="grid"]').length : 0,
+            treeGrids: debugRoot ? queryDeepAll(debugRoot, '[role="treegrid"]').length : 0,
             host: window.location.href
           });
         }
@@ -12982,11 +13175,16 @@ Thank you.`;
         console.warn("[DAT Dispatcher Assist] Scan failed:", error);
       }
     };
+    const queueDomInjectionFrame = (allowDocumentDeepScan, scanScope) => {
+      window.requestAnimationFrame(() => performDomInjection(allowDocumentDeepScan, scanScope));
+    };
     if (immediate) {
-      window.requestAnimationFrame(run);
+      queueDomInjectionFrame(true, flushPendingScanScope());
       return;
     }
-    state.debounceTimer = window.setTimeout(() => window.requestAnimationFrame(run), 160);
+    state.debounceTimer = window.setTimeout(() => {
+      queueDomInjectionFrame(false, flushPendingScanScope());
+    }, 160);
   }
   function readStoredPrefs() {
     try {
