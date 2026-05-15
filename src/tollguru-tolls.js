@@ -247,14 +247,19 @@ export async function fetchTollGuruLaneTolls(requestJson, apiKey, laneContext, o
     try {
       const tollStatus = await fetchTollGuruTollStatus(requestJson, apiKey, mapLineLatLngs, options);
       return { tollStatus, via: "polyline" };
-    } catch {
-      // Fall through to OD
+    } catch (error) {
+      console.warn("[TollGuru Debug] complete-polyline failed, will try origin-destination if addresses exist:", error);
     }
   }
 
   if (from && to) {
-    const tollStatus = await fetchTollGuruOriginDestinationTolls(requestJson, apiKey, from, to, options);
-    return { tollStatus, via: "origin-destination" };
+    try {
+      const tollStatus = await fetchTollGuruOriginDestinationTolls(requestJson, apiKey, from, to, options);
+      return { tollStatus, via: "origin-destination" };
+    } catch (error) {
+      console.error("[TollGuru Debug] origin-destination failed:", error);
+      throw error;
+    }
   }
 
   throw new Error("TollGuru: polyline failed or missing, and origin/destination text missing");

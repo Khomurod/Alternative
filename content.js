@@ -10005,12 +10005,18 @@
       try {
         const tollStatus = await fetchTollGuruTollStatus(requestJson, apiKey, mapLineLatLngs, options);
         return { tollStatus, via: "polyline" };
-      } catch {
+      } catch (error) {
+        console.warn("[TollGuru Debug] complete-polyline failed, will try origin-destination if addresses exist:", error);
       }
     }
     if (from && to) {
-      const tollStatus = await fetchTollGuruOriginDestinationTolls(requestJson, apiKey, from, to, options);
-      return { tollStatus, via: "origin-destination" };
+      try {
+        const tollStatus = await fetchTollGuruOriginDestinationTolls(requestJson, apiKey, from, to, options);
+        return { tollStatus, via: "origin-destination" };
+      } catch (error) {
+        console.error("[TollGuru Debug] origin-destination failed:", error);
+        throw error;
+      }
     }
     throw new Error("TollGuru: polyline failed or missing, and origin/destination text missing");
   }
@@ -10735,7 +10741,16 @@
               );
               tollFromTg = tg.tollStatus;
               tollGuruVia = tg.via;
-            } catch {
+            } catch (error) {
+              console.error("[TollGuru Debug] Fetch failed (inspectLane):", error);
+              console.warn("[TollGuru Debug] Context:", {
+                origin: origin?.display,
+                destination: destination?.display,
+                hasKey: Boolean(tollguruApiKey),
+                keyLength: tollguruApiKey?.length ?? 0,
+                mapProviderForTg,
+                polylinePointCount: polylineSource?.mapLineLatLngs?.length ?? 0
+              });
               tollFromTg = null;
               tollGuruVia = null;
             }
@@ -13161,6 +13176,10 @@ Thank you.`;
     state.routeInspector = createRouteInspector({
       tollguruApiKey: state.tollguruApiKey
     });
+    const keyLen = typeof state.tollguruApiKey === "string" ? state.tollguruApiKey.length : 0;
+    if (keyLen === 0) {
+      console.warn("[TollGuru Debug] Effective TollGuru key is empty after rebuildRouteInspector; TollGuru calls are skipped.");
+    }
   }
   function loadTollguruApiKeyFromStorage() {
     if (!globalThis.chrome?.storage?.local?.get) {

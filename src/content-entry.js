@@ -103,6 +103,10 @@ function rebuildRouteInspector() {
   state.routeInspector = createRouteInspector({
     tollguruApiKey: state.tollguruApiKey
   });
+  const keyLen = typeof state.tollguruApiKey === "string" ? state.tollguruApiKey.length : 0;
+  if (keyLen === 0) {
+    console.warn("[TollGuru Debug] Effective TollGuru key is empty after rebuildRouteInspector; TollGuru calls are skipped.");
+  }
 }
 
 function loadTollguruApiKeyFromStorage() {

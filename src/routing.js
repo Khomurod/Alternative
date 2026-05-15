@@ -885,7 +885,16 @@ export function createRouteInspector(options = {}) {
             );
             tollFromTg = tg.tollStatus;
             tollGuruVia = tg.via;
-          } catch {
+          } catch (error) {
+            console.error("[TollGuru Debug] Fetch failed (inspectLane):", error);
+            console.warn("[TollGuru Debug] Context:", {
+              origin: origin?.display,
+              destination: destination?.display,
+              hasKey: Boolean(tollguruApiKey),
+              keyLength: tollguruApiKey?.length ?? 0,
+              mapProviderForTg,
+              polylinePointCount: polylineSource?.mapLineLatLngs?.length ?? 0
+            });
             tollFromTg = null;
             tollGuruVia = null;
           }

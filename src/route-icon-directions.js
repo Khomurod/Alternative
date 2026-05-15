@@ -27,6 +27,7 @@ export function buildGoogleDirectionsUrl(searchOrigin, pickup, delivery) {
   const originPoint = sanitizeLocationText(pickup || "");
   const destPoint = sanitizeLocationText(delivery || "");
 
+  /** @type {URL} Official Maps directions entry point (waypoints survive redirects better than short links). */
   const url = new URL("https://www.google.com/maps/dir/");
   url.searchParams.set("api", "1");
   url.searchParams.set("travelmode", "driving");
