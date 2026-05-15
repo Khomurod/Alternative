@@ -3,6 +3,7 @@ import { GOOGLE_MAPS_API_KEY } from "./google-api-key.js";
 import { DEFAULT_TOLLGURU_VEHICLE_TYPE } from "./tollguru-api-key.js";
 import { readRouteCacheEntry, writeRouteCacheEntry } from "./route-cache-storage.js";
 import { fetchTollGuruLaneTolls } from "./tollguru-tolls.js";
+import { shouldFallbackTollToGoogle } from "./toll-google-fallback.js";
 
 /** @param {string} text @param {number} max */
 function shortenTollFailureHint(text, max = 260) {
@@ -855,6 +856,8 @@ export function createRouteInspector(options = {}) {
         let tollGuruVia = null;
         /** @type {string} */
         let tollGuruFailureHint = "";
+        /** Set when TollGuru throws; drives transport-only Google toll fallback. */
+        let tollGuruCatchError = null;
 
         const hadTgKeyConfigured = Boolean(tollguruApiKey);
         if (tollguruApiKey && requestJson) {
@@ -876,6 +879,7 @@ export function createRouteInspector(options = {}) {
             tollFromTg = tg.tollStatus;
             tollGuruVia = tg.via;
           } catch (error) {
+            tollGuruCatchError = error;
             console.error("[TollGuru Debug] Fetch failed (inspectLane):", error);
             console.warn("[TollGuru Debug] Context:", {
               origin: origin?.display,
@@ -897,10 +901,24 @@ export function createRouteInspector(options = {}) {
 
         payload.tollGuruFailureHint = tollGuruFailureHint || undefined;
 
+        const allowGoogleTollLine =
+          !hadTgKeyConfigured ||
+          (googleTollFallbackAllowed && shouldFallbackTollToGoogle(tollGuruCatchError));
+
         if (tollFromTg) {
           payload.tollStatus = tollFromTg;
-        } else if (googleRoute && (!hadTgKeyConfigured || googleTollFallbackAllowed)) {
+        } else if (googleRoute && allowGoogleTollLine) {
           payload.tollStatus = googleRoute.tollStatus;
+        } else if (
+          googleRoute &&
+          hadTgKeyConfigured &&
+          googleTollFallbackAllowed &&
+          tollguruApiKey &&
+          !allowGoogleTollLine
+        ) {
+          payload.tollStatus = tollGuruFailureHint
+            ? `Unavailable — TollGuru: ${tollGuruFailureHint}`
+            : "Unavailable — TollGuru did not return a toll estimate (Google toll fallback skipped for this error type).";
         } else if (
           googleRoute &&
           hadTgKeyConfigured &&
@@ -931,7 +949,7 @@ export function createRouteInspector(options = {}) {
           googleRoute &&
           String(googleRoute.tollStatus || "").trim() &&
           payload.tollStatus === googleRoute.tollStatus &&
-          (!hadTgKeyConfigured || googleTollFallbackAllowed)
+          allowGoogleTollLine
         ) {
           payload.tollSource = "google";
         } else {
@@ -959,13 +977,23 @@ export function createRouteInspector(options = {}) {
               )}. Google toll fallback is off in extension options.`
             ];
           } else {
-            const googleTollNote =
-              tollGuruFailureHint && hadTgKeyConfigured && googleTollFallbackAllowed
-                ? `Miles/geometry from OSRM; toll estimate from Google Routes (TollGuru error: ${shortenTollFailureHint(
-                    tollGuruFailureHint,
-                    220
-                  )}).`
-                : "Miles/geometry from OSRM; toll estimate from Google Routes.";
+            let googleTollNote = "Miles/geometry from OSRM; toll estimate from Google Routes.";
+            if (hadTgKeyConfigured && googleTollFallbackAllowed && allowGoogleTollLine && tollGuruFailureHint) {
+              googleTollNote = `Miles/geometry from OSRM; toll estimate from Google Routes (TollGuru error: ${shortenTollFailureHint(
+                tollGuruFailureHint,
+                220
+              )}).`;
+            } else if (
+              hadTgKeyConfigured &&
+              googleTollFallbackAllowed &&
+              !allowGoogleTollLine &&
+              tollGuruFailureHint
+            ) {
+              googleTollNote = `Miles/geometry from OSRM. TollGuru: ${shortenTollFailureHint(
+                tollGuruFailureHint,
+                220
+              )}. Google toll fallback skipped for this error type.`;
+            }
             payload.notes = [
               ...(Array.isArray(osrmRoute.notes) ? osrmRoute.notes : []),
               ...(Array.isArray(googleRoute.notes) ? googleRoute.notes : []),

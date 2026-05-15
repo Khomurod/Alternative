@@ -1,5 +1,5 @@
 import { DAT_EXT_USER_ACCOUNT_EMAIL_KEY } from "./src/google-account.js";
-import { validateFetchUrl } from "./src/fetch-url-guard.js";
+import { sanitizeFetchJsonHeaders, validateFetchUrl } from "./src/fetch-url-guard.js";
 import { buildGmailApiRaw, snippetForLogs, validateGmailSendPayload } from "./src/gmail-send.js";
 
 const GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
@@ -7,9 +7,42 @@ const GMAIL_SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/
 
 chrome.runtime.onInstalled.addListener((details) => {
   console.info("[DAT Dispatcher Assist] Extension installed:", details.reason);
+  configureExtensionSidePanel();
 });
 
+chrome.runtime.onStartup.addListener(() => {
+  configureExtensionSidePanel();
+});
+
+/** Toolbar icon opens the Side Panel hub (popup removed). */
+function configureExtensionSidePanel() {
+  if (!chrome.sidePanel?.setPanelBehavior) {
+    return;
+  }
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+}
+
+configureExtensionSidePanel();
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === "dat-ext:open-side-panel") {
+    const tabId = sender.tab?.id;
+    if (typeof tabId !== "number") {
+      sendResponse({ ok: false, error: "No tab context for side panel" });
+      return;
+    }
+    chrome.sidePanel
+      .open({ tabId })
+      .then(() => sendResponse({ ok: true }))
+      .catch((err) =>
+        sendResponse({
+          ok: false,
+          error: String(err?.message || err || chrome.runtime.lastError?.message || "sidePanel.open failed")
+        })
+      );
+    return true;
+  }
+
   if (message?.type === "my-ext:ping") {
     sendResponse({
       ok: true,
@@ -26,6 +59,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           ok: false,
           cancelled: false,
           error: String(error?.message || error || "Google login failed")
+        })
+      );
+    return true;
+  }
+
+  if (message?.type === "dat-ext:google-session-sync") {
+    handleGoogleSessionSync()
+      .then((result) => sendResponse(result))
+      .catch(() => sendResponse({ ok: false, silent: true }));
+    return true;
+  }
+
+  if (message?.type === "dat-ext:google-logout") {
+    handleGoogleLogout()
+      .then((result) => sendResponse(result))
+      .catch((error) =>
+        sendResponse({
+          ok: false,
+          error: String(error?.message || error || "Google sign-out failed")
         })
       );
     return true;
@@ -94,27 +146,121 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 /**
- * @returns {Promise<{ ok: true, email: string } | { ok: false, cancelled?: boolean, error?: string }>}
+ * Clears OAuth state for this extension: removes cached tokens locally, best-effort revokes at Google,
+ * then clears remaining identity cache and drops persisted board UI email (TollGuru / templates unchanged).
+ *
+ * Full server-side invalidation depends on the revoke request succeeding; cache-only clears still allow
+ * reuse until consent is re-established if revoke fails.
+ *
+ * @returns {Promise<{ ok: true } | { ok: false, error: string }>}
  */
+async function handleGoogleLogout() {
+  try {
+    let token = null;
+    try {
+      token = await getAuthToken({ interactive: false });
+    } catch {
+      /* No silent token — still clear cache below */
+    }
+
+    if (token) {
+      await removeCachedToken(token);
+      await revokeGoogleTokenBestEffort(token);
+    }
+
+    await new Promise((resolve, reject) => {
+      chrome.identity.clearAllCachedAuthTokens(() => {
+        const err = chrome.runtime.lastError;
+        if (err) {
+          reject(new Error(err.message || "clearAllCachedAuthTokens failed"));
+          return;
+        }
+        resolve();
+      });
+    });
+    await chrome.storage.local.remove(DAT_EXT_USER_ACCOUNT_EMAIL_KEY);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: String(error?.message || error || "Google sign-out failed") };
+  }
+}
+
+/**
+ * @param {string} token
+ */
+async function revokeGoogleTokenBestEffort(token) {
+  try {
+    await fetch("https://oauth2.googleapis.com/revoke", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token })
+    });
+  } catch {
+    /* ignore — local cache removal still applies */
+  }
+}
+
+/**
+ * Exchange access token for email and persist `DAT_EXT_USER_ACCOUNT_EMAIL_KEY` (never stores the token).
+ *
+ * @param {string} token
+ * @returns {Promise<{ ok: true, email: string }>}
+ */
+async function fetchGoogleAccountEmailWithToken(token) {
+  const response = await fetch(GOOGLE_USERINFO_URL, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Userinfo request failed (${response.status})`);
+  }
+
+  const data = await response.json();
+  const email = String(data?.email || "").trim();
+  if (!email) {
+    throw new Error("Google account did not return an email address");
+  }
+
+  await chrome.storage.local.set({ [DAT_EXT_USER_ACCOUNT_EMAIL_KEY]: email });
+  return { ok: true, email };
+}
+
+/**
+ * Silent refresh only — no interactive UI. Used when DAT loads and storage may be missing email.
+ *
+ * @returns {Promise<{ ok: true, email: string } | { ok: false, silent: true }>}
+ */
+async function handleGoogleSessionSync() {
+  try {
+    const token = await getAuthToken({ interactive: false });
+    return await fetchGoogleAccountEmailWithToken(token);
+  } catch {
+    return { ok: false, silent: true };
+  }
+}
+
 async function handleGoogleLogin() {
   try {
-    const token = await getAuthTokenInteractive();
-    const response = await fetch(GOOGLE_USERINFO_URL, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Userinfo request failed (${response.status})`);
+    let token;
+    try {
+      token = await getAuthToken({ interactive: false });
+    } catch {
+      token = await getAuthTokenInteractive();
     }
 
-    const data = await response.json();
-    const email = String(data?.email || "").trim();
-    if (!email) {
-      throw new Error("Google account did not return an email address");
+    try {
+      return await fetchGoogleAccountEmailWithToken(token);
+    } catch (err) {
+      const msg = String(err?.message || err || "");
+      const statusMatch = msg.match(/Userinfo request failed \((\d+)\)/);
+      const status = statusMatch ? Number(statusMatch[1]) : 0;
+      if (status === 401) {
+        await removeCachedToken(token);
+        const token2 = await getAuthTokenInteractive();
+        return await fetchGoogleAccountEmailWithToken(token2);
+      }
+      throw err;
     }
-
-    await chrome.storage.local.set({ [DAT_EXT_USER_ACCOUNT_EMAIL_KEY]: email });
-    return { ok: true, email };
   } catch (error) {
     const message = String(error?.message || error || "Google login failed");
     if (isOAuthCancelled(message)) {
@@ -488,7 +634,7 @@ async function handleFetchJson(message) {
 
   const headers = {
     Accept: "application/json",
-    ...(message?.headers && typeof message.headers === "object" ? message.headers : {})
+    ...sanitizeFetchJsonHeaders(message?.headers, url.hostname)
   };
   const hasContentType = Object.keys(headers).some((key) => key.toLowerCase() === "content-type");
   const body =

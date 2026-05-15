@@ -9876,7 +9876,7 @@
       </label>
       <div class="btn-row">
         <button type="button" class="btn-primary" data-action="send">Send email</button>
-        <button type="button" class="btn-ghost" data-action="signin">Sign in with Google</button>
+        <button type="button" class="btn-ghost" data-action="signin">Open settings to sign in</button>
       </div>
     </div>
     <div class="inbox">
@@ -10837,6 +10837,39 @@
     throw new Error("TollGuru: polyline failed or missing, and origin/destination text missing");
   }
 
+  // src/toll-google-fallback.js
+  function shouldFallbackTollToGoogle(error) {
+    if (error == null || error === void 0) {
+      return false;
+    }
+    const msg = String(
+      /** @type {{ message?: string }} */
+      error?.message ?? error ?? ""
+    ).toLowerCase();
+    if (!msg.trim()) {
+      return false;
+    }
+    if (/\b401\b/.test(msg)) {
+      return false;
+    }
+    if (/\b403\b/.test(msg)) {
+      return true;
+    }
+    if (/\b404\b/.test(msg)) {
+      return true;
+    }
+    if (/\b408\b/.test(msg)) {
+      return true;
+    }
+    if (/\b502\b|\b503\b|\b504\b/.test(msg)) {
+      return true;
+    }
+    if (/timeout|timed out|abort|aborted|failed to fetch|networkerror|network request failed|net::err/i.test(msg)) {
+      return true;
+    }
+    return false;
+  }
+
   // src/routing.js
   function shortenTollFailureHint(text, max = 260) {
     const t = String(text || "").replace(/\s+/g, " ").trim();
@@ -11520,6 +11553,7 @@
           let tollFromTg = null;
           let tollGuruVia = null;
           let tollGuruFailureHint = "";
+          let tollGuruCatchError = null;
           const hadTgKeyConfigured = Boolean(tollguruApiKey);
           if (tollguruApiKey && requestJson) {
             try {
@@ -11540,6 +11574,7 @@
               tollFromTg = tg.tollStatus;
               tollGuruVia = tg.via;
             } catch (error) {
+              tollGuruCatchError = error;
               console.error("[TollGuru Debug] Fetch failed (inspectLane):", error);
               console.warn("[TollGuru Debug] Context:", {
                 origin: origin?.display,
@@ -11558,10 +11593,13 @@
             tollGuruFailureHint = "";
           }
           payload.tollGuruFailureHint = tollGuruFailureHint || void 0;
+          const allowGoogleTollLine = !hadTgKeyConfigured || googleTollFallbackAllowed && shouldFallbackTollToGoogle(tollGuruCatchError);
           if (tollFromTg) {
             payload.tollStatus = tollFromTg;
-          } else if (googleRoute && (!hadTgKeyConfigured || googleTollFallbackAllowed)) {
+          } else if (googleRoute && allowGoogleTollLine) {
             payload.tollStatus = googleRoute.tollStatus;
+          } else if (googleRoute && hadTgKeyConfigured && googleTollFallbackAllowed && tollguruApiKey && !allowGoogleTollLine) {
+            payload.tollStatus = tollGuruFailureHint ? `Unavailable \u2014 TollGuru: ${tollGuruFailureHint}` : "Unavailable \u2014 TollGuru did not return a toll estimate (Google toll fallback skipped for this error type).";
           } else if (googleRoute && hadTgKeyConfigured && !googleTollFallbackAllowed && tollguruApiKey) {
             payload.tollStatus = tollGuruFailureHint ? `Unavailable \u2014 TollGuru: ${tollGuruFailureHint} (Google toll fallback off in extension options.)` : "Unavailable \u2014 TollGuru failed; Google toll fallback is off in extension options.";
           } else if (!googleRoute && googleApiKey) {
@@ -11575,7 +11613,7 @@
           if (tollFromTg) {
             payload.tollSource = "tollguru";
             payload.tollVehicleType = tollguruVehicleType;
-          } else if (googleRoute && String(googleRoute.tollStatus || "").trim() && payload.tollStatus === googleRoute.tollStatus && (!hadTgKeyConfigured || googleTollFallbackAllowed)) {
+          } else if (googleRoute && String(googleRoute.tollStatus || "").trim() && payload.tollStatus === googleRoute.tollStatus && allowGoogleTollLine) {
             payload.tollSource = "google";
           } else {
             payload.tollSource = "none";
@@ -11597,10 +11635,18 @@
                 )}. Google toll fallback is off in extension options.`
               ];
             } else {
-              const googleTollNote = tollGuruFailureHint && hadTgKeyConfigured && googleTollFallbackAllowed ? `Miles/geometry from OSRM; toll estimate from Google Routes (TollGuru error: ${shortenTollFailureHint(
-                tollGuruFailureHint,
-                220
-              )}).` : "Miles/geometry from OSRM; toll estimate from Google Routes.";
+              let googleTollNote = "Miles/geometry from OSRM; toll estimate from Google Routes.";
+              if (hadTgKeyConfigured && googleTollFallbackAllowed && allowGoogleTollLine && tollGuruFailureHint) {
+                googleTollNote = `Miles/geometry from OSRM; toll estimate from Google Routes (TollGuru error: ${shortenTollFailureHint(
+                  tollGuruFailureHint,
+                  220
+                )}).`;
+              } else if (hadTgKeyConfigured && googleTollFallbackAllowed && !allowGoogleTollLine && tollGuruFailureHint) {
+                googleTollNote = `Miles/geometry from OSRM. TollGuru: ${shortenTollFailureHint(
+                  tollGuruFailureHint,
+                  220
+                )}. Google toll fallback skipped for this error type.`;
+              }
               payload.notes = [
                 ...Array.isArray(osrmRoute.notes) ? osrmRoute.notes : [],
                 ...Array.isArray(googleRoute.notes) ? googleRoute.notes : [],
@@ -12663,7 +12709,7 @@ ${bookingBody}`.trim(),
       senderAccount.appendChild(senderLabel);
     } else {
       senderAccount.appendChild(
-        buildActionButton("\u26A0\uFE0F Sign in to Gmail for one-click compose", {
+        buildActionButton("\u26A0\uFE0F Open Side Panel to sign in for Gmail", {
           variant: "ghost",
           dataRole: "gmail-signin",
           onClick: typeof onRequestGoogleLogin === "function" ? onRequestGoogleLogin : void 0,
@@ -12847,6 +12893,8 @@ ${bookingBody}`.trim(),
       return "";
     }
     const root = doc.body || doc;
+    const searchForm = root.querySelector("dat-search-form") ?? root.querySelector("form.search-form-updated") ?? root.querySelector("form.search-form");
+    const scopes = searchForm instanceof HTMLElement ? [searchForm, root] : [root];
     const selectors = [
       'dat-search-location[data-test="origin-input"] input',
       '[data-test="origin-input"] input',
@@ -12855,22 +12903,25 @@ ${bookingBody}`.trim(),
       "input#origin-automation",
       "dat-search-location#origin-automation input",
       '[locationtestid="origin-input"] input',
-      "dat-search-location[locationtestid='origin-input'] input"
+      "dat-search-location[locationtestid='origin-input'] input",
+      'dat-search-location[data-field="origin"] input'
     ];
-    for (const sel of selectors) {
-      const el = root.querySelector(sel);
-      if (el instanceof HTMLInputElement) {
-        const v = (el.value || "").trim();
+    for (const scope of scopes) {
+      for (const sel of selectors) {
+        const el = scope.querySelector(sel);
+        if (el instanceof HTMLInputElement) {
+          const v = (el.value || "").trim();
+          if (v) {
+            return sanitizeLocationText(v);
+          }
+        }
+      }
+      const fallback = scope.querySelector("dat-search-location input");
+      if (fallback instanceof HTMLInputElement) {
+        const v = (fallback.value || "").trim();
         if (v) {
           return sanitizeLocationText(v);
         }
-      }
-    }
-    const fallback = root.querySelector("dat-search-location input");
-    if (fallback instanceof HTMLInputElement) {
-      const v = (fallback.value || "").trim();
-      if (v) {
-        return sanitizeLocationText(v);
       }
     }
     return "";
@@ -13223,6 +13274,26 @@ ${bookingBody}`.trim(),
     }
   }
 
+  // src/directions-search-origin.js
+  var DAT_EXT_LAST_SEARCH_ORIGIN_SESSION_KEY = "dat-ext-last-search-origin-v1";
+  function persistAndResolveDirectionsSearchOrigin(doc, readSearchOriginText2) {
+    const live = String(readSearchOriginText2(doc) || "").trim();
+    let persisted = "";
+    try {
+      persisted = String(globalThis.sessionStorage?.getItem(DAT_EXT_LAST_SEARCH_ORIGIN_SESSION_KEY) ?? "").trim();
+    } catch {
+      persisted = "";
+    }
+    if (live) {
+      try {
+        globalThis.sessionStorage?.setItem(DAT_EXT_LAST_SEARCH_ORIGIN_SESSION_KEY, live);
+      } catch {
+      }
+      return live;
+    }
+    return sanitizeLocationText(persisted);
+  }
+
   // src/route-icon-directions.js
   function extractLanePickupDeliveryFromDatRow(row) {
     if (!(row instanceof Element)) {
@@ -13251,6 +13322,16 @@ ${bookingBody}`.trim(),
     }
     return { pickup, delivery };
   }
+  function normalizedMapsParam(sp, key) {
+    return sanitizeLocationText(sp.get(key) ?? "");
+  }
+  function formatDirectionsWaypointVia(pickupSanitized) {
+    const p = sanitizeLocationText(pickupSanitized || "");
+    if (!p) {
+      return "";
+    }
+    return p.toLowerCase().startsWith("via:") ? p : `via:${p}`;
+  }
   function validateBuiltDirectionsUrlMatches(urlHref, searchRaw, pickup, delivery) {
     let u;
     try {
@@ -13266,9 +13347,13 @@ ${bookingBody}`.trim(),
     const destPoint = sanitizeLocationText(delivery || "");
     const abc = search && search.toLowerCase() !== originPoint.toLowerCase();
     if (abc) {
-      return u.searchParams.get("origin") === search && u.searchParams.get("waypoints") === originPoint && u.searchParams.get("destination") === destPoint;
+      const wpExpected = formatDirectionsWaypointVia(originPoint);
+      const wpRaw = u.searchParams.get("waypoints") ?? "";
+      const wpGotNorm = sanitizeLocationText(wpRaw);
+      const wpStripVia = sanitizeLocationText(wpRaw.replace(/^via:\s*/i, ""));
+      return normalizedMapsParam(u.searchParams, "origin") === search && (wpGotNorm === sanitizeLocationText(wpExpected) || wpStripVia === originPoint) && normalizedMapsParam(u.searchParams, "destination") === destPoint;
     }
-    return u.searchParams.get("origin") === originPoint && u.searchParams.get("destination") === destPoint;
+    return normalizedMapsParam(u.searchParams, "origin") === originPoint && normalizedMapsParam(u.searchParams, "destination") === destPoint;
   }
   function buildGoogleDirectionsUrl(searchOrigin, pickup, delivery) {
     const search = sanitizeLocationText(searchOrigin || "");
@@ -13279,7 +13364,7 @@ ${bookingBody}`.trim(),
     url.searchParams.set("travelmode", "driving");
     if (search && search.toLowerCase() !== originPoint.toLowerCase()) {
       url.searchParams.set("origin", search);
-      url.searchParams.set("waypoints", originPoint);
+      url.searchParams.set("waypoints", formatDirectionsWaypointVia(originPoint));
       url.searchParams.set("destination", destPoint);
     } else {
       url.searchParams.set("origin", originPoint);
@@ -13308,7 +13393,7 @@ ${bookingBody}`.trim(),
     if (!lane) {
       return null;
     }
-    const searchOrigin = readSearchOriginText(doc) || lane.pickup;
+    const searchOrigin = persistAndResolveDirectionsSearchOrigin(doc, readSearchOriginText);
     const url = buildGoogleDirectionsUrl(searchOrigin, lane.pickup, lane.delivery);
     if (validateBuiltDirectionsUrlMatches(url, searchOrigin, lane.pickup, lane.delivery)) {
       return url;
@@ -14028,11 +14113,33 @@ ${bookingBody}`.trim(),
   // src/mutation-gating.js
   var CDK_CONTENT_WRAPPER = "cdk-virtual-scroll-content-wrapper";
   var ROW_CONTAINER = "row-container";
+  var GMAIL_DRAWER_HOST_ID = "dat-ext-gmail-drawer";
+  function isWithinDatExtGmailDrawer(node) {
+    let cur = node instanceof Element ? node : node?.parentElement ?? null;
+    while (cur) {
+      if (cur instanceof HTMLElement && cur.id === GMAIL_DRAWER_HOST_ID) {
+        return true;
+      }
+      const parent = cur.parentNode;
+      if (parent instanceof ShadowRoot) {
+        cur = parent.host;
+        continue;
+      }
+      cur = cur.parentElement;
+    }
+    return false;
+  }
   function shouldScheduleScanFromMutations(mutations, config) {
     const { injectedFlag, rootClass } = config;
     for (const mutation of mutations) {
       if (mutation.type === "attributes" && mutation.target instanceof HTMLElement) {
         const el = mutation.target;
+        if (el === document.body && mutation.attributeName === "class") {
+          continue;
+        }
+        if (isWithinDatExtGmailDrawer(el)) {
+          continue;
+        }
         if (el.classList.contains(injectedFlag) || el.closest(`.${rootClass}`)) {
           continue;
         }
@@ -14046,6 +14153,9 @@ ${bookingBody}`.trim(),
         return true;
       }
       for (const node of mutation.addedNodes) {
+        if (isWithinDatExtGmailDrawer(node)) {
+          continue;
+        }
         if (!(node instanceof HTMLElement)) {
           continue;
         }
@@ -14058,6 +14168,9 @@ ${bookingBody}`.trim(),
         return true;
       }
       for (const node of mutation.removedNodes) {
+        if (isWithinDatExtGmailDrawer(node)) {
+          continue;
+        }
         if (!(node instanceof HTMLElement)) {
           continue;
         }
@@ -14139,14 +14252,22 @@ ${bookingBody}`.trim(),
     btn.innerHTML = DIR_BTN_SVG;
     return btn;
   }
-  function applyTripMilesParentFlex(miles, btn) {
-    const insertParent = miles.parentElement;
-    if (!(insertParent instanceof HTMLElement)) {
+  function attachDirectionsBesideTripMiles(doc, miles, btn) {
+    const parentEl = miles.parentElement;
+    const wrapExisting = parentEl instanceof HTMLElement && parentEl.classList.contains("dat-ext-trip-miles-with-dir") ? parentEl : null;
+    if (wrapExisting instanceof HTMLElement && wrapExisting.contains(miles)) {
+      if (!wrapExisting.querySelector(`[${ROW_DIR_ATTR}]`)) {
+        wrapExisting.insertBefore(btn, miles);
+      }
       return;
     }
-    insertParent.style.display = "flex";
-    insertParent.style.alignItems = "center";
-    insertParent.insertBefore(btn, miles);
+    if (!(parentEl instanceof HTMLElement)) {
+      return;
+    }
+    const wrap = doc.createElement("span");
+    wrap.className = "dat-ext-trip-miles-with-dir";
+    parentEl.insertBefore(wrap, miles);
+    wrap.append(btn, miles);
   }
   function injectRowSummaryDirectionAnchors(doc) {
     const viewport = findDatOneViewport(doc);
@@ -14170,7 +14291,7 @@ ${bookingBody}`.trim(),
         continue;
       }
       const btn = createDirectionButton(doc, "list");
-      applyTripMilesParentFlex(miles, btn);
+      attachDirectionsBesideTripMiles(doc, miles, btn);
     }
   }
   function injectLoadDetailDirectionAnchors(doc) {
@@ -14186,7 +14307,7 @@ ${bookingBody}`.trim(),
         continue;
       }
       const btn = createDirectionButton(doc, "detail");
-      applyTripMilesParentFlex(miles, btn);
+      attachDirectionsBesideTripMiles(doc, miles, btn);
     }
   }
 
@@ -14244,7 +14365,7 @@ ${bookingBody}`.trim(),
       return;
     }
     window.__datDispatcherAssistInitialized = true;
-    configureDatExtGmailDrawer({ onRequestGoogleLogin: requestGoogleLogin });
+    configureDatExtGmailDrawer({ onRequestGoogleLogin: requestOpenSidePanel });
     rebuildRouteInspector();
     loadNumeoColumnPreference();
     loadRouteEconomicsPreferencesFromChrome();
@@ -14267,6 +14388,9 @@ ${bookingBody}`.trim(),
     attachRowSummaryDirectionsListener();
     startObserver();
     scheduleScan(true);
+    if (!String(state.userAccountEmail || "").trim()) {
+      maybeSilentGoogleSessionSync();
+    }
   }
   function applyTollguruSkipPolylineFromRecord(record) {
     const key = String(state.tollguruApiKey || "").trim();
@@ -14486,10 +14610,9 @@ ${bookingBody}`.trim(),
           emailOfferTemplate: state.emailOfferTemplate,
           emailBookingTemplate: state.emailBookingTemplate,
           emailTemplateMode: state.emailUiState.selectedTemplate,
-          selectedSenderEmail: state.emailUiState.selectedEmail,
           numeroColumnEnabled: state.numeroColumnEnabled,
           userAccountEmail: state.userAccountEmail,
-          onRequestGoogleLogin: requestGoogleLogin,
+          onRequestGoogleLogin: requestOpenSidePanel,
           tollguruApiKey: state.tollguruApiKey
         });
         injectRowSummaryDirectionAnchors(document);
@@ -14642,18 +14765,53 @@ ${bookingBody}`.trim(),
     bindInputsIfNeeded();
     refreshApplyButtonState(panel);
   }
+  function applyConnectedGoogleAccount(email) {
+    state.userAccountEmail = String(email || "").trim();
+    syncConnectEmailButton();
+    if (!state.emailUiState.selectedEmail) {
+      persistEmailUiState({
+        ...state.emailUiState,
+        selectedEmail: state.userAccountEmail
+      });
+    }
+    const toolsRoot = document.getElementById(HEADER_TOOLS_ID);
+    if (toolsRoot) {
+      syncCompactEmailOptions(toolsRoot);
+    }
+    scheduleScan(true);
+  }
+  function maybeSilentGoogleSessionSync() {
+    if (!globalThis.chrome?.runtime?.sendMessage) {
+      return;
+    }
+    chrome.runtime.sendMessage({ type: "dat-ext:google-session-sync" }, (response) => {
+      if (chrome.runtime.lastError) {
+        return;
+      }
+      if (response?.ok && response.email) {
+        applyConnectedGoogleAccount(response.email);
+      }
+    });
+  }
   function loadUserAccountEmailFromStorage() {
     if (!globalThis.chrome?.storage?.local?.get) {
+      maybeSilentGoogleSessionSync();
       return;
     }
     chrome.storage.local.get([DAT_EXT_USER_ACCOUNT_EMAIL_KEY], (result) => {
-      state.userAccountEmail = String(result[DAT_EXT_USER_ACCOUNT_EMAIL_KEY] || "").trim();
+      const stored = String(result[DAT_EXT_USER_ACCOUNT_EMAIL_KEY] || "").trim();
+      if (stored) {
+        state.userAccountEmail = stored;
+      }
       syncConnectEmailButton();
       const root = document.getElementById(HEADER_TOOLS_ID);
       if (root) {
         syncCompactEmailOptions(root);
       }
       scheduleScan(true);
+      if (!stored && !String(state.userAccountEmail || "").trim()) {
+        maybeSilentGoogleSessionSync();
+      }
     });
   }
   function attachUserAccountEmailListener() {
@@ -14679,44 +14837,20 @@ ${bookingBody}`.trim(),
       return;
     }
     const email = String(state.userAccountEmail || "").trim();
-    btn.textContent = email ? `Account: ${email}` : "Connect Email";
-    btn.title = email ? `Signed in as ${email}. Click to refresh Google account.` : "Sign in with Google to use your Gmail address";
+    btn.textContent = email ? "Settings & Inbox" : "Connect Account (Side Panel)";
+    btn.title = email ? "Open the extension Side Panel for Gmail settings, TollGuru, and templates." : "Open the extension Side Panel to sign in with Google (not blocked by site pop-ups).";
   }
-  function requestGoogleLogin() {
+  function requestOpenSidePanel() {
     if (!globalThis.chrome?.runtime?.sendMessage) {
       return;
     }
-    const btn = document.querySelector('[data-action="connect-email"]');
-    if (btn instanceof HTMLButtonElement) {
-      btn.disabled = true;
-      btn.setAttribute("aria-busy", "true");
-    }
-    chrome.runtime.sendMessage({ type: "dat-ext:google-login" }, (response) => {
-      if (btn instanceof HTMLButtonElement) {
-        btn.disabled = false;
-        btn.removeAttribute("aria-busy");
-      }
+    chrome.runtime.sendMessage({ type: "dat-ext:open-side-panel" }, (response) => {
       if (chrome.runtime.lastError) {
+        console.warn("[DAT Dispatcher Assist] Side panel:", chrome.runtime.lastError.message);
         return;
       }
-      if (response?.ok && response.email) {
-        state.userAccountEmail = String(response.email).trim();
-        syncConnectEmailButton();
-        if (!state.emailUiState.selectedEmail) {
-          persistEmailUiState({
-            ...state.emailUiState,
-            selectedEmail: state.userAccountEmail
-          });
-        }
-        const toolsRoot = document.getElementById(HEADER_TOOLS_ID);
-        if (toolsRoot) {
-          syncCompactEmailOptions(toolsRoot);
-        }
-        scheduleScan(true);
-        return;
-      }
-      if (!response?.cancelled && response?.error) {
-        console.warn("[DAT Dispatcher Assist] Google login failed:", response.error);
+      if (!response?.ok && response?.error) {
+        console.warn("[DAT Dispatcher Assist] Side panel:", response.error);
       }
     });
   }
@@ -14744,7 +14878,7 @@ ${bookingBody}`.trim(),
     root.addEventListener("change", sync);
     root.querySelector('[data-action="apply"]')?.addEventListener("click", apply);
     root.querySelector('[data-action="connect-email"]')?.addEventListener("click", () => {
-      requestGoogleLogin();
+      requestOpenSidePanel();
     });
     root.querySelector('[data-field="email-select"]')?.addEventListener("change", () => {
       persistEmailUiState({
@@ -14892,7 +15026,7 @@ ${bookingBody}`.trim(),
     left.className = "my-ext-compact-left";
     left.append(
       buildHeaderButton(
-        state.userAccountEmail ? `Account: ${state.userAccountEmail}` : "Connect Email",
+        state.userAccountEmail ? "Settings & Inbox" : "Connect Account (Side Panel)",
         "connect-email"
       ),
       buildHeaderSelect("email-select", "Email", state.emailUiState.selectedEmail),

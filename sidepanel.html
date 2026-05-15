@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DAT Dispatcher Assist</title>
+    <style>
+      :root {
+        --sp-accent: #0b66ff;
+        --sp-accent-soft: rgba(11, 102, 255, 0.22);
+        --sp-text: #f1f5f9;
+        --sp-muted: #94a3b8;
+        --sp-border: rgba(148, 163, 184, 0.28);
+        --sp-glass: rgba(15, 23, 42, 0.55);
+        --sp-danger: #f87171;
+        --sp-danger-bg: rgba(248, 113, 113, 0.14);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        font-size: 13px;
+        color: var(--sp-text);
+        background: linear-gradient(165deg, #0b1220 0%, #1e293b 42%, #0f172a 100%);
+        line-height: 1.45;
+      }
+
+      .sp-wrap {
+        padding: 14px 14px 28px;
+        max-width: 420px;
+      }
+
+      .sp-brand {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+
+      .sp-brand h1 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      .sp-brand span {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--sp-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      .glass-card {
+        background: var(--sp-glass);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        border: 1px solid var(--sp-border);
+        border-radius: 14px;
+        padding: 14px 14px 16px;
+        margin-bottom: 12px;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+      }
+
+      .card-title {
+        margin: 0 0 10px;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--sp-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .identity-primary {
+        margin: 0 0 8px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--sp-text);
+        word-break: break-all;
+      }
+
+      .identity-primary.muted {
+        font-weight: 500;
+        color: var(--sp-muted);
+        font-size: 13px;
+      }
+
+      .muted-line {
+        margin: 0 0 12px;
+        font-size: 12px;
+        color: var(--sp-muted);
+      }
+
+      .hint {
+        margin: 0 0 10px;
+        color: var(--sp-muted);
+        font-size: 12px;
+      }
+
+      label {
+        display: block;
+        font-weight: 600;
+        margin: 10px 0 4px;
+        color: #cbd5e1;
+      }
+
+      textarea,
+      input[type="password"],
+      input[type="text"] {
+        width: 100%;
+        padding: 8px 10px;
+        border-radius: 10px;
+        border: 1px solid var(--sp-border);
+        background: rgba(15, 23, 42, 0.65);
+        color: var(--sp-text);
+        font: inherit;
+      }
+
+      textarea {
+        min-height: 88px;
+        resize: vertical;
+      }
+
+      .btn-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      button {
+        padding: 9px 14px;
+        font-weight: 700;
+        border-radius: 10px;
+        border: 1px solid transparent;
+        cursor: pointer;
+        font-size: 13px;
+      }
+
+      button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
+      .btn-primary {
+        background: var(--sp-accent);
+        color: #fff;
+        border-color: rgba(255, 255, 255, 0.12);
+      }
+
+      .btn-primary:hover:not(:disabled) {
+        filter: brightness(1.06);
+      }
+
+      .btn-secondary {
+        background: rgba(255, 255, 255, 0.08);
+        color: var(--sp-text);
+        border-color: var(--sp-border);
+      }
+
+      .btn-secondary:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.12);
+      }
+
+      .btn-danger {
+        background: var(--sp-danger-bg);
+        color: var(--sp-danger);
+        border-color: rgba(248, 113, 113, 0.45);
+      }
+
+      .btn-danger:hover:not(:disabled) {
+        filter: brightness(1.08);
+      }
+
+      #test-tollguru {
+        background: transparent;
+        color: var(--sp-accent);
+        border-color: var(--sp-accent-soft);
+      }
+
+      .feature-block .row {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        font-weight: 500;
+        margin: 0;
+        cursor: pointer;
+        color: #e2e8f0;
+      }
+
+      .feature-block .row input {
+        margin-top: 3px;
+      }
+
+      .hint.small {
+        margin: 8px 0 0 28px;
+        font-size: 11px;
+      }
+
+      code {
+        font-size: 11px;
+        background: rgba(255, 255, 255, 0.08);
+        padding: 1px 5px;
+        border-radius: 5px;
+      }
+
+      #msg {
+        margin-top: 12px;
+        min-height: 18px;
+        font-size: 12px;
+      }
+
+      #msg.msg--error {
+        color: var(--sp-danger);
+      }
+
+      #msg.msg--ok {
+        color: #4ade80;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sp-wrap">
+      <div class="sp-brand">
+        <h1>DAT Dispatcher Assist</h1>
+        <span>Hub</span>
+      </div>
+
+      <section class="glass-card" id="identity-section">
+        <div class="card-title">Identity</div>
+        <p id="identity-primary" class="identity-primary muted"></p>
+        <p id="tollguru-status" class="muted-line"></p>
+        <div class="btn-row">
+          <button type="button" id="connect-google" class="btn-primary">Sign in with Google</button>
+          <button type="button" id="disconnect-google" class="btn-danger" hidden>Sign out</button>
+        </div>
+        <p class="hint" style="margin-top: 12px; margin-bottom: 0">
+          OAuth runs here — not in the DAT page — so site popup blockers cannot interfere. Requires Gmail API enabled on your Google Cloud project for this extension client.
+        </p>
+      </section>
+
+      <section class="glass-card">
+        <div class="card-title">Email templates</div>
+        <p class="hint">
+          Optional bodies for load-detail buttons. Placeholders:
+          <code>{{company}}</code>, <code>{{origin}}</code>, <code>{{destination}}</code>, <code>{{email}}</code>
+        </p>
+        <label for="offer-tpl">Offer email body</label>
+        <textarea id="offer-tpl" spellcheck="true" aria-label="Offer email body template"></textarea>
+        <label for="booking-tpl">Booking email body</label>
+        <textarea id="booking-tpl" spellcheck="true" aria-label="Booking email body template"></textarea>
+        <button type="button" id="save" class="btn-primary" style="margin-top: 12px">Save templates &amp; options</button>
+      </section>
+
+      <section class="glass-card feature-block">
+        <label class="row">
+          <input type="checkbox" id="numeo-column" />
+          <span>Load assist column (route map, toll tools)</span>
+        </label>
+        <p class="hint small">Uncheck and save to hide the column. Reload DAT tabs after toggling.</p>
+      </section>
+
+      <section class="glass-card">
+        <div class="card-title">TollGuru</div>
+        <label for="tollguru-key">API key</label>
+        <input
+          id="tollguru-key"
+          type="password"
+          autocomplete="off"
+          spellcheck="false"
+          aria-label="TollGuru API key"
+          placeholder="tg_…"
+        />
+        <p class="hint">Stored only in this browser. Reload DAT after saving.</p>
+        <label class="row" style="margin-top: 12px">
+          <input type="checkbox" id="google-toll-fallback" />
+          <span>Allow Google Routes toll estimate when TollGuru fails</span>
+        </label>
+        <button type="button" id="test-tollguru" class="btn-secondary">Test TollGuru API</button>
+      </section>
+
+      <div id="msg" aria-live="polite"></div>
+    </div>
+    <script type="module" src="sidepanel.js"></script>
+  </body>
+</html>

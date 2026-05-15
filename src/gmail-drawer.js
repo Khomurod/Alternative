@@ -321,7 +321,7 @@ function ensureDrawerDom() {
       </label>
       <div class="btn-row">
         <button type="button" class="btn-primary" data-action="send">Send email</button>
-        <button type="button" class="btn-ghost" data-action="signin">Sign in with Google</button>
+        <button type="button" class="btn-ghost" data-action="signin">Open settings to sign in</button>
       </div>
     </div>
     <div class="inbox">

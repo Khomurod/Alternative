@@ -92,6 +92,23 @@
       #test-tollguru:hover {
         filter: brightness(0.98);
       }
+      #disconnect-google {
+        margin-top: 8px;
+        padding: 8px 14px;
+        font-weight: 600;
+        border-radius: 8px;
+        border: 1px solid #d0d5dd;
+        background: #fff;
+        color: #344054;
+        cursor: pointer;
+      }
+      #disconnect-google:hover {
+        filter: none;
+        background: #f9fafb;
+      }
+      .account-line {
+        margin-bottom: 6px;
+      }
     </style>
   </head>
   <body>
@@ -102,6 +119,15 @@
       drawer only). Enable the <strong>Gmail API</strong> on your OAuth client’s Google Cloud project. If the API fails,
       use “Open … in Gmail” as a fallback.
     </p>
+    <div class="feature-block">
+      <p id="google-account-line" class="hint account-line">
+        <strong>Google account:</strong> <span id="google-account-email">Loading…</span>
+      </p>
+      <button id="disconnect-google" type="button">Disconnect Google (clear cached OAuth)</button>
+      <p class="hint small" style="margin-left: 0">
+        Clears saved sign-in for Gmail tools on this browser. TollGuru keys and templates stay saved.
+      </p>
+    </div>
     <p class="hint">
       Optional email bodies for the load detail buttons. Leave blank to use built-in text. Placeholders:
       <code>{{company}}</code>, <code>{{origin}}</code>, <code>{{destination}}</code>, <code>{{email}}</code>

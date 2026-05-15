@@ -4,13 +4,16 @@
   "description": "Injects dispatcher workflow helpers into the DAT Freight & Analytics loadboard.",
   "version": "1.4.0",
   "action": {
-    "default_title": "DAT Dispatcher Assist Tool",
-    "default_popup": "popup.html"
+    "default_title": "DAT Dispatcher Assist Tool — open Side Panel"
   },
   "permissions": [
     "storage",
-    "identity"
+    "identity",
+    "sidePanel"
   ],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
   "oauth2": {
     "client_id": "374181243903-fj3ktspdhkdt1ebp4oe9bpsmb4l7hbto.apps.googleusercontent.com",
     "scopes": [
@@ -33,6 +36,7 @@
     "https://routes.googleapis.com/*",
     "https://apis.tollguru.com/*",
     "https://www.googleapis.com/*",
+    "https://oauth2.googleapis.com/*",
     "https://gmail.googleapis.com/*"
   ],
   "content_scripts": [

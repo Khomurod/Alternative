@@ -114,6 +114,13 @@ export function readSearchOriginText(doc) {
     return "";
   }
   const root = doc.body || doc;
+  const searchForm =
+    root.querySelector("dat-search-form") ??
+    root.querySelector("form.search-form-updated") ??
+    root.querySelector("form.search-form");
+
+  const scopes = searchForm instanceof HTMLElement ? [searchForm, root] : [root];
+
   const selectors = [
     'dat-search-location[data-test="origin-input"] input',
     '[data-test="origin-input"] input',
@@ -122,22 +129,26 @@ export function readSearchOriginText(doc) {
     "input#origin-automation",
     "dat-search-location#origin-automation input",
     '[locationtestid="origin-input"] input',
-    "dat-search-location[locationtestid='origin-input'] input"
+    "dat-search-location[locationtestid='origin-input'] input",
+    'dat-search-location[data-field="origin"] input'
   ];
-  for (const sel of selectors) {
-    const el = root.querySelector(sel);
-    if (el instanceof HTMLInputElement) {
-      const v = (el.value || "").trim();
+
+  for (const scope of scopes) {
+    for (const sel of selectors) {
+      const el = scope.querySelector(sel);
+      if (el instanceof HTMLInputElement) {
+        const v = (el.value || "").trim();
+        if (v) {
+          return sanitizeLocationText(v);
+        }
+      }
+    }
+    const fallback = scope.querySelector("dat-search-location input");
+    if (fallback instanceof HTMLInputElement) {
+      const v = (fallback.value || "").trim();
       if (v) {
         return sanitizeLocationText(v);
       }
-    }
-  }
-  const fallback = root.querySelector("dat-search-location input");
-  if (fallback instanceof HTMLInputElement) {
-    const v = (fallback.value || "").trim();
-    if (v) {
-      return sanitizeLocationText(v);
     }
   }
   return "";

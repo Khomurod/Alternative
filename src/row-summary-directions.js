@@ -36,17 +36,34 @@ function createDirectionButton(doc, context) {
 }
 
 /**
+ * Places trip miles + directions button in an extension-owned wrapper (does not restyle DAT parents).
+ *
+ * @param {Document} doc
  * @param {HTMLElement} miles
  * @param {HTMLButtonElement} btn
  */
-function applyTripMilesParentFlex(miles, btn) {
-  const insertParent = miles.parentElement;
-  if (!(insertParent instanceof HTMLElement)) {
+function attachDirectionsBesideTripMiles(doc, miles, btn) {
+  const parentEl = miles.parentElement;
+  const wrapExisting =
+    parentEl instanceof HTMLElement && parentEl.classList.contains("dat-ext-trip-miles-with-dir")
+      ? parentEl
+      : null;
+
+  if (wrapExisting instanceof HTMLElement && wrapExisting.contains(miles)) {
+    if (!wrapExisting.querySelector(`[${ROW_DIR_ATTR}]`)) {
+      wrapExisting.insertBefore(btn, miles);
+    }
     return;
   }
-  insertParent.style.display = "flex";
-  insertParent.style.alignItems = "center";
-  insertParent.insertBefore(btn, miles);
+
+  if (!(parentEl instanceof HTMLElement)) {
+    return;
+  }
+
+  const wrap = doc.createElement("span");
+  wrap.className = "dat-ext-trip-miles-with-dir";
+  parentEl.insertBefore(wrap, miles);
+  wrap.append(btn, miles);
 }
 
 /**
@@ -83,7 +100,7 @@ export function injectRowSummaryDirectionAnchors(doc) {
     }
 
     const btn = createDirectionButton(doc, "list");
-    applyTripMilesParentFlex(miles, btn);
+    attachDirectionsBesideTripMiles(doc, miles, btn);
   }
 }
 
@@ -111,7 +128,7 @@ export function injectLoadDetailDirectionAnchors(doc) {
     }
 
     const btn = createDirectionButton(doc, "detail");
-    applyTripMilesParentFlex(miles, btn);
+    attachDirectionsBesideTripMiles(doc, miles, btn);
   }
 }
 

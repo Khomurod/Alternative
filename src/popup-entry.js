@@ -1,5 +1,6 @@
 import { EMAIL_BOOKING_TEMPLATE_KEY, EMAIL_OFFER_TEMPLATE_KEY } from "./email-template.js";
 import { DAT_EXT_NUMEO_COLUMN_KEY } from "./feature-flags.js";
+import { DAT_EXT_USER_ACCOUNT_EMAIL_KEY } from "./google-account.js";
 import { DAT_EXT_GOOGLE_TOLL_FALLBACK_KEY, DAT_EXT_TOLLGURU_API_KEY } from "./tollguru-api-key.js";
 
 const offerEl = document.getElementById("offer-tpl");
@@ -10,6 +11,53 @@ const googleFallbackEl = document.getElementById("google-toll-fallback");
 const testTollguruBtn = document.getElementById("test-tollguru");
 const save = document.getElementById("save");
 const msg = document.getElementById("msg");
+const googleAccountEmailSpan = document.getElementById("google-account-email");
+const disconnectGoogleBtn = document.getElementById("disconnect-google");
+
+function refreshGoogleAccountLabel() {
+  if (!googleAccountEmailSpan) {
+    return;
+  }
+  chrome.storage.local.get([DAT_EXT_USER_ACCOUNT_EMAIL_KEY], (r) => {
+    const em = String(r[DAT_EXT_USER_ACCOUNT_EMAIL_KEY] || "").trim();
+    googleAccountEmailSpan.textContent = em || "(not connected — open Side Panel from DAT or the toolbar icon)";
+  });
+}
+
+refreshGoogleAccountLabel();
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes[DAT_EXT_USER_ACCOUNT_EMAIL_KEY]) {
+    refreshGoogleAccountLabel();
+  }
+});
+
+disconnectGoogleBtn?.addEventListener("click", () => {
+  msg.className = "";
+  msg.style.color = "";
+
+  chrome.runtime.sendMessage({ type: "dat-ext:google-logout" }, (response) => {
+    if (chrome.runtime.lastError) {
+      msg.textContent = String(chrome.runtime.lastError.message || "Disconnect failed");
+      msg.className = "msg--error";
+      msg.style.color = "#b42318";
+      return;
+    }
+    if (!response?.ok) {
+      msg.textContent = String(response?.error || "Disconnect failed");
+      msg.className = "msg--error";
+      msg.style.color = "#b42318";
+      return;
+    }
+    msg.textContent = "Disconnected. Reload DAT tabs if needed.";
+    msg.style.color = "#15803d";
+    refreshGoogleAccountLabel();
+    setTimeout(() => {
+      msg.textContent = "";
+      msg.style.color = "";
+    }, 2800);
+  });
+});
 
 chrome.storage.local.get(
   [

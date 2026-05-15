@@ -529,9 +529,9 @@ body.dat-ext-drawer-open {
 }
 
 .my-ext-badge--fail {
-  background: #fee2e2;
-  border-color: #fca5a5;
-  color: #991b1b;
+  background: #fecaca;
+  border-color: #ef4444;
+  color: #7f1d1d;
 }
 
 .my-ext-badge--neutral,
@@ -670,7 +670,18 @@ tr.dat-ext-grid-row--fail,
 .row-container.dat-ext-grid-row--fail,
 [role="row"].dat-ext-grid-row--fail {
   box-shadow: none;
-  background-color: #fee2e2 !important;
+  background-color: #fecaca !important;
+  color: #111827 !important;
+  outline: 1px solid #dc2626;
+}
+
+tr.dat-ext-grid-row--fail td,
+tr.dat-ext-grid-row--fail th,
+.row-container.dat-ext-grid-row--fail .table-cell,
+.row-container.dat-ext-grid-row--fail .row-cells,
+.row-container.dat-ext-grid-row--fail [role="gridcell"],
+[role="row"].dat-ext-grid-row--fail [role="gridcell"] {
+  background-color: #fecaca !important;
   color: #111827 !important;
 }
 
@@ -685,6 +696,7 @@ tr.dat-ext-grid-row--partial,
 tr.dat-ext-grid-row--negotiate,
 .row-container.dat-ext-grid-row--negotiate,
 [role="row"].dat-ext-grid-row--negotiate {
+  background-color: #f5f3ff !important;
   box-shadow: inset 3px 0 0 0 #7c3aed;
 }
 
@@ -752,6 +764,14 @@ tr.dat-ext-grid-row--hidden,
   .my-ext-btn {
     width: 100%;
   }
+}
+
+/* Row summary: miles + directions control wrapper (no DAT parent flex overrides) */
+.dat-ext-trip-miles-with-dir {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  vertical-align: middle;
 }
 
 /* Row summary: Google directions control (injected next to trip miles, DAT virtual scroll) */

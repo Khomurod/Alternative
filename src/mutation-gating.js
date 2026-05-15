@@ -2,6 +2,28 @@ import { DAT_EXT_GRID_ROW_MARK } from "./row-deco-key.js";
 
 const CDK_CONTENT_WRAPPER = "cdk-virtual-scroll-content-wrapper";
 const ROW_CONTAINER = "row-container";
+/** Matches [src/gmail-drawer.js] `DRAWER_HOST_ID` — rail host lives outside `.dat-ext-root`. */
+const GMAIL_DRAWER_HOST_ID = "dat-ext-gmail-drawer";
+
+/**
+ * @param {Node | null | undefined} node
+ * @returns {boolean}
+ */
+export function isWithinDatExtGmailDrawer(node) {
+  let cur = node instanceof Element ? node : node?.parentElement ?? null;
+  while (cur) {
+    if (cur instanceof HTMLElement && cur.id === GMAIL_DRAWER_HOST_ID) {
+      return true;
+    }
+    const parent = cur.parentNode;
+    if (parent instanceof ShadowRoot) {
+      cur = parent.host;
+      continue;
+    }
+    cur = cur.parentElement;
+  }
+  return false;
+}
 
 /**
  * Decide whether DOM mutations warrant a full assist rescan.
@@ -17,6 +39,12 @@ export function shouldScheduleScanFromMutations(mutations, config) {
   for (const mutation of mutations) {
     if (mutation.type === "attributes" && mutation.target instanceof HTMLElement) {
       const el = mutation.target;
+      if (el === document.body && mutation.attributeName === "class") {
+        continue;
+      }
+      if (isWithinDatExtGmailDrawer(el)) {
+        continue;
+      }
       if (el.classList.contains(injectedFlag) || el.closest(`.${rootClass}`)) {
         continue;
       }
@@ -37,6 +65,10 @@ export function shouldScheduleScanFromMutations(mutations, config) {
     }
 
     for (const node of mutation.addedNodes) {
+      if (isWithinDatExtGmailDrawer(node)) {
+        continue;
+      }
+
       if (!(node instanceof HTMLElement)) {
         continue;
       }
@@ -53,6 +85,10 @@ export function shouldScheduleScanFromMutations(mutations, config) {
     }
 
     for (const node of mutation.removedNodes) {
+      if (isWithinDatExtGmailDrawer(node)) {
+        continue;
+      }
+
       if (!(node instanceof HTMLElement)) {
         continue;
       }

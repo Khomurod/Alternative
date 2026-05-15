@@ -911,7 +911,7 @@ export function renderColumn(card, ctx) {
     senderAccount.appendChild(senderLabel);
   } else {
     senderAccount.appendChild(
-      buildActionButton("⚠️ Sign in to Gmail for one-click compose", {
+      buildActionButton("⚠️ Open Side Panel to sign in for Gmail", {
         variant: "ghost",
         dataRole: "gmail-signin",
         onClick: typeof onRequestGoogleLogin === "function" ? onRequestGoogleLogin : undefined,

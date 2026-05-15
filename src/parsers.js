@@ -242,6 +242,7 @@ export function evaluateRowAgainstTargets(targets, row) {
 
   const hasPostedRate =
     row.rateDollars !== null && Number.isFinite(row.rateDollars) && row.rateDollars > 0;
+  /** Disqualify-on-empty: any economics threshold active requires a posted dollar rate on the row. */
   if (!hasPostedRate) {
     return "fail";
   }

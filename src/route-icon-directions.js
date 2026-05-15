@@ -59,13 +59,29 @@ export function extractLaneFromRow(row) {
 }
 
 /**
- * Sanity-check that decoded params match what was intended (encoding / URL parser bugs).
+ * Decode-safe comparison (Maps may re-serialize query encoding).
  *
- * @param {string} urlHref
- * @param {string} searchRaw
- * @param {string} pickup
- * @param {string} delivery
+ * @param {URLSearchParams} sp
+ * @param {string} key
+ * @returns {string}
  */
+function normalizedMapsParam(sp, key) {
+  return sanitizeLocationText(sp.get(key) ?? "");
+}
+
+/**
+ * Middle leg uses `via:` so Maps treats it as a pass-through stop (stable vs bare address).
+ *
+ * @param {string} pickupSanitized
+ */
+export function formatDirectionsWaypointVia(pickupSanitized) {
+  const p = sanitizeLocationText(pickupSanitized || "");
+  if (!p) {
+    return "";
+  }
+  return p.toLowerCase().startsWith("via:") ? p : `via:${p}`;
+}
+
 export function validateBuiltDirectionsUrlMatches(urlHref, searchRaw, pickup, delivery) {
   let u;
   try {
@@ -82,13 +98,20 @@ export function validateBuiltDirectionsUrlMatches(urlHref, searchRaw, pickup, de
   const abc = search && search.toLowerCase() !== originPoint.toLowerCase();
 
   if (abc) {
+    const wpExpected = formatDirectionsWaypointVia(originPoint);
+    const wpRaw = u.searchParams.get("waypoints") ?? "";
+    const wpGotNorm = sanitizeLocationText(wpRaw);
+    const wpStripVia = sanitizeLocationText(wpRaw.replace(/^via:\s*/i, ""));
     return (
-      u.searchParams.get("origin") === search &&
-      u.searchParams.get("waypoints") === originPoint &&
-      u.searchParams.get("destination") === destPoint
+      normalizedMapsParam(u.searchParams, "origin") === search &&
+      (wpGotNorm === sanitizeLocationText(wpExpected) || wpStripVia === originPoint) &&
+      normalizedMapsParam(u.searchParams, "destination") === destPoint
     );
   }
-  return u.searchParams.get("origin") === originPoint && u.searchParams.get("destination") === destPoint;
+  return (
+    normalizedMapsParam(u.searchParams, "origin") === originPoint &&
+    normalizedMapsParam(u.searchParams, "destination") === destPoint
+  );
 }
 
 export function buildGoogleDirectionsUrl(searchOrigin, pickup, delivery) {
@@ -103,7 +126,7 @@ export function buildGoogleDirectionsUrl(searchOrigin, pickup, delivery) {
 
   if (search && search.toLowerCase() !== originPoint.toLowerCase()) {
     url.searchParams.set("origin", search);
-    url.searchParams.set("waypoints", originPoint);
+    url.searchParams.set("waypoints", formatDirectionsWaypointVia(originPoint));
     url.searchParams.set("destination", destPoint);
   } else {
     url.searchParams.set("origin", originPoint);

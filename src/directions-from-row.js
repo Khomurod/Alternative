@@ -1,4 +1,5 @@
 import { readSearchOriginText, extractPickupDeliveryFromLoadDetailHost } from "./detail-panel.js";
+import { persistAndResolveDirectionsSearchOrigin } from "./directions-search-origin.js";
 import {
   buildGoogleDirectionsUrl,
   extractLanePickupDeliveryFromDatRow,
@@ -49,7 +50,7 @@ function buildValidatedDirectionsUrl(doc, lane) {
   if (!lane) {
     return null;
   }
-  const searchOrigin = readSearchOriginText(doc) || lane.pickup;
+  const searchOrigin = persistAndResolveDirectionsSearchOrigin(doc, readSearchOriginText);
   const url = buildGoogleDirectionsUrl(searchOrigin, lane.pickup, lane.delivery);
   if (
     validateBuiltDirectionsUrlMatches(url, searchOrigin, lane.pickup, lane.delivery)

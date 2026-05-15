@@ -82,7 +82,7 @@ function bootstrap() {
   }
 
   window.__datDispatcherAssistInitialized = true;
-  configureDatExtGmailDrawer({ onRequestGoogleLogin: requestGoogleLogin });
+  configureDatExtGmailDrawer({ onRequestGoogleLogin: requestOpenSidePanel });
   rebuildRouteInspector();
   loadNumeoColumnPreference();
   loadRouteEconomicsPreferencesFromChrome();
@@ -108,6 +108,10 @@ function start() {
   attachRowSummaryDirectionsListener();
   startObserver();
   scheduleScan(true);
+
+  if (!String(state.userAccountEmail || "").trim()) {
+    maybeSilentGoogleSessionSync();
+  }
 }
 
 function applyTollguruSkipPolylineFromRecord(record) {
@@ -375,10 +379,9 @@ function scheduleScan(immediate) {
         emailOfferTemplate: state.emailOfferTemplate,
         emailBookingTemplate: state.emailBookingTemplate,
         emailTemplateMode: state.emailUiState.selectedTemplate,
-        selectedSenderEmail: state.emailUiState.selectedEmail,
         numeroColumnEnabled: state.numeroColumnEnabled,
         userAccountEmail: state.userAccountEmail,
-        onRequestGoogleLogin: requestGoogleLogin,
+        onRequestGoogleLogin: requestOpenSidePanel,
         tollguruApiKey: state.tollguruApiKey
       });
 
@@ -561,19 +564,60 @@ function injectHeaderTools() {
   refreshApplyButtonState(panel);
 }
 
+function applyConnectedGoogleAccount(email) {
+  state.userAccountEmail = String(email || "").trim();
+  syncConnectEmailButton();
+  if (!state.emailUiState.selectedEmail) {
+    persistEmailUiState({
+      ...state.emailUiState,
+      selectedEmail: state.userAccountEmail
+    });
+  }
+  const toolsRoot = document.getElementById(HEADER_TOOLS_ID);
+  if (toolsRoot) {
+    syncCompactEmailOptions(toolsRoot);
+  }
+  scheduleScan(true);
+}
+
+function maybeSilentGoogleSessionSync() {
+  if (!globalThis.chrome?.runtime?.sendMessage) {
+    return;
+  }
+
+  chrome.runtime.sendMessage({ type: "dat-ext:google-session-sync" }, (response) => {
+    if (chrome.runtime.lastError) {
+      return;
+    }
+
+    if (response?.ok && response.email) {
+      applyConnectedGoogleAccount(response.email);
+    }
+  });
+}
+
 function loadUserAccountEmailFromStorage() {
   if (!globalThis.chrome?.storage?.local?.get) {
+    maybeSilentGoogleSessionSync();
     return;
   }
 
   chrome.storage.local.get([DAT_EXT_USER_ACCOUNT_EMAIL_KEY], (result) => {
-    state.userAccountEmail = String(result[DAT_EXT_USER_ACCOUNT_EMAIL_KEY] || "").trim();
+    const stored = String(result[DAT_EXT_USER_ACCOUNT_EMAIL_KEY] || "").trim();
+    if (stored) {
+      state.userAccountEmail = stored;
+    }
+
     syncConnectEmailButton();
     const root = document.getElementById(HEADER_TOOLS_ID);
     if (root) {
       syncCompactEmailOptions(root);
     }
     scheduleScan(true);
+
+    if (!stored && !String(state.userAccountEmail || "").trim()) {
+      maybeSilentGoogleSessionSync();
+    }
   });
 }
 
@@ -604,50 +648,24 @@ function syncConnectEmailButton(root = document.getElementById(HEADER_TOOLS_ID))
   }
 
   const email = String(state.userAccountEmail || "").trim();
-  btn.textContent = email ? `Account: ${email}` : "Connect Email";
-  btn.title = email ? `Signed in as ${email}. Click to refresh Google account.` : "Sign in with Google to use your Gmail address";
+  btn.textContent = email ? "Settings & Inbox" : "Connect Account (Side Panel)";
+  btn.title = email
+    ? "Open the extension Side Panel for Gmail settings, TollGuru, and templates."
+    : "Open the extension Side Panel to sign in with Google (not blocked by site pop-ups).";
 }
 
-function requestGoogleLogin() {
+function requestOpenSidePanel() {
   if (!globalThis.chrome?.runtime?.sendMessage) {
     return;
   }
 
-  const btn = document.querySelector('[data-action="connect-email"]');
-  if (btn instanceof HTMLButtonElement) {
-    btn.disabled = true;
-    btn.setAttribute("aria-busy", "true");
-  }
-
-  chrome.runtime.sendMessage({ type: "dat-ext:google-login" }, (response) => {
-    if (btn instanceof HTMLButtonElement) {
-      btn.disabled = false;
-      btn.removeAttribute("aria-busy");
-    }
-
+  chrome.runtime.sendMessage({ type: "dat-ext:open-side-panel" }, (response) => {
     if (chrome.runtime.lastError) {
+      console.warn("[DAT Dispatcher Assist] Side panel:", chrome.runtime.lastError.message);
       return;
     }
-
-    if (response?.ok && response.email) {
-      state.userAccountEmail = String(response.email).trim();
-      syncConnectEmailButton();
-      if (!state.emailUiState.selectedEmail) {
-        persistEmailUiState({
-          ...state.emailUiState,
-          selectedEmail: state.userAccountEmail
-        });
-      }
-      const toolsRoot = document.getElementById(HEADER_TOOLS_ID);
-      if (toolsRoot) {
-        syncCompactEmailOptions(toolsRoot);
-      }
-      scheduleScan(true);
-      return;
-    }
-
-    if (!response?.cancelled && response?.error) {
-      console.warn("[DAT Dispatcher Assist] Google login failed:", response.error);
+    if (!response?.ok && response?.error) {
+      console.warn("[DAT Dispatcher Assist] Side panel:", response.error);
     }
   });
 }
@@ -681,7 +699,7 @@ function bindInputsIfNeeded() {
   root.addEventListener("change", sync);
   root.querySelector('[data-action="apply"]')?.addEventListener("click", apply);
   root.querySelector('[data-action="connect-email"]')?.addEventListener("click", () => {
-    requestGoogleLogin();
+    requestOpenSidePanel();
   });
   root.querySelector('[data-field="email-select"]')?.addEventListener("change", () => {
     persistEmailUiState({
@@ -884,7 +902,7 @@ function buildHeaderTools(prefs) {
   left.className = "my-ext-compact-left";
   left.append(
     buildHeaderButton(
-      state.userAccountEmail ? `Account: ${state.userAccountEmail}` : "Connect Email",
+      state.userAccountEmail ? "Settings & Inbox" : "Connect Account (Side Panel)",
       "connect-email"
     ),
     buildHeaderSelect("email-select", "Email", state.emailUiState.selectedEmail),
