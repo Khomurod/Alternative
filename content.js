@@ -9853,6 +9853,7 @@
   var DAT_EXT_GOOGLE_TOLL_FALLBACK_KEY = "datExtGoogleTollFallback";
   var DAT_EXT_TOLLGURU_SKIP_POLYLINE_MAP_KEY = "datExtTollguruSkipPolylineByFingerprint";
   var DEFAULT_TOLLGURU_VEHICLE_TYPE = "5AxlesTruck";
+  var HARDCODED_TOLLGURU_API_KEY = "tg_B0FB9D6C300342C688D755047EA0D917";
   function tollguruKeyFingerprint(apiKey) {
     const s = String(apiKey ?? "");
     let h = 5381;
@@ -9866,7 +9867,230 @@
     return true;
   }
   function getEffectiveTollGuruApiKey(storedFromChrome) {
-    return String(storedFromChrome ?? "").trim();
+    const stored = String(storedFromChrome ?? "").trim();
+    if (stored) {
+      return stored;
+    }
+    return String(HARDCODED_TOLLGURU_API_KEY ?? "").trim();
+  }
+
+  // src/route-cache-storage.js
+  var ROUTE_CACHE_LEGACY_LS_PREFIX = "dat-ext-route-cache-v4:";
+  var ROUTE_CACHE_CHROME_PREFIX = "dat-ext-route-cache-v5:";
+  var ROUTE_CACHE_MIGRATION_FLAG = "dat-ext-route-cache-migrated-v4-v5";
+  var ROUTE_CACHE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1e3;
+  var memoryLaneByKey = /* @__PURE__ */ new Map();
+  var pendingChromeWrites = /* @__PURE__ */ new Map();
+  var chromeFlushTimer = null;
+  var migrationPromise = null;
+  function cacheEnvelopeStale(envelope) {
+    const ageMs = Date.now() - Date.parse(envelope?.updatedAt || "");
+    return !Number.isFinite(ageMs) || ageMs > ROUTE_CACHE_MAX_AGE_MS;
+  }
+  function stripUpdatedAt(envelope) {
+    if (!envelope || typeof envelope !== "object") {
+      return envelope;
+    }
+    const { updatedAt: _updatedAt, ...rest } = envelope;
+    return rest;
+  }
+  function chromeKey(laneKey) {
+    return `${ROUTE_CACHE_CHROME_PREFIX}${laneKey}`;
+  }
+  function storageGet(area, keys) {
+    return new Promise((resolve) => {
+      if (!area?.get) {
+        resolve({});
+        return;
+      }
+      area.get(keys, (result) => {
+        resolve(result ?? {});
+      });
+    });
+  }
+  function storageSet(area, items) {
+    return new Promise((resolve, reject) => {
+      if (!area?.set) {
+        resolve();
+        return;
+      }
+      try {
+        area.set(items, () => {
+          const err = typeof chrome !== "undefined" ? chrome.runtime?.lastError : void 0;
+          if (err) {
+            reject(new Error(err.message || "chrome.storage.local.set failed"));
+            return;
+          }
+          resolve();
+        });
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
+  }
+  function storageRemove(area, keys) {
+    return new Promise((resolve) => {
+      if (!area?.remove || keys.length === 0) {
+        resolve();
+        return;
+      }
+      area.remove(keys, () => resolve());
+    });
+  }
+  function listLegacyV4Keys(ls) {
+    if (!ls?.length) {
+      return [];
+    }
+    const out = [];
+    for (let i = 0; i < ls.length; i++) {
+      const k = ls.key(i);
+      if (k?.startsWith(ROUTE_CACHE_LEGACY_LS_PREFIX)) {
+        out.push(k);
+      }
+    }
+    return out;
+  }
+  async function ensureMigratedFromLocalStorageV4(ls, area) {
+    if (!area?.get || !area?.set || !ls) {
+      return;
+    }
+    const flag = await storageGet(area, [ROUTE_CACHE_MIGRATION_FLAG]);
+    if (flag[ROUTE_CACHE_MIGRATION_FLAG]) {
+      return;
+    }
+    const legacyKeys = listLegacyV4Keys(ls);
+    const batch = { [ROUTE_CACHE_MIGRATION_FLAG]: true };
+    for (const lk of legacyKeys) {
+      try {
+        const raw = ls.getItem(lk);
+        if (!raw) {
+          ls.removeItem(lk);
+          continue;
+        }
+        const parsed = JSON.parse(raw);
+        if (!cacheEnvelopeStale(parsed)) {
+          const suffix = lk.slice(ROUTE_CACHE_LEGACY_LS_PREFIX.length);
+          batch[`${ROUTE_CACHE_CHROME_PREFIX}${suffix}`] = parsed;
+        }
+      } catch {
+      }
+      try {
+        ls.removeItem(lk);
+      } catch {
+      }
+    }
+    await storageSet(area, batch);
+  }
+  function scheduleMigration(ls, area) {
+    if (!migrationPromise) {
+      migrationPromise = ensureMigratedFromLocalStorageV4(ls, area).catch(() => {
+        migrationPromise = null;
+      });
+    }
+    return migrationPromise;
+  }
+  function flushPendingChrome(area) {
+    if (!pendingChromeWrites.size || !area?.set) {
+      return Promise.resolve();
+    }
+    const batch = (
+      /** @type {Record<string, object>} */
+      Object.fromEntries(pendingChromeWrites)
+    );
+    pendingChromeWrites.clear();
+    return storageSet(area, batch);
+  }
+  async function readRouteCacheEntry(opts) {
+    const { laneKey, chromeStorage, localStorage: ls, forceRefresh } = opts;
+    if (!laneKey || forceRefresh) {
+      return null;
+    }
+    const key = chromeKey(laneKey);
+    const memHit = memoryLaneByKey.get(key);
+    if (memHit && !cacheEnvelopeStale(memHit)) {
+      return stripUpdatedAt(memHit);
+    }
+    if (memHit && cacheEnvelopeStale(memHit)) {
+      memoryLaneByKey.delete(key);
+    }
+    if (chromeStorage?.get) {
+      await scheduleMigration(ls, chromeStorage);
+      const blob = await storageGet(chromeStorage, [key]);
+      const envelope = blob?.[key];
+      if (envelope && typeof envelope === "object" && envelope.updatedAt) {
+        if (!cacheEnvelopeStale(envelope)) {
+          memoryLaneByKey.set(key, envelope);
+          return stripUpdatedAt(envelope);
+        }
+        await storageRemove(chromeStorage, [key]);
+      }
+    }
+    if (ls?.getItem) {
+      try {
+        const raw = ls.getItem(`${ROUTE_CACHE_LEGACY_LS_PREFIX}${laneKey}`);
+        if (!raw) {
+          return null;
+        }
+        const envelope = JSON.parse(raw);
+        if (cacheEnvelopeStale(envelope)) {
+          ls.removeItem(`${ROUTE_CACHE_LEGACY_LS_PREFIX}${laneKey}`);
+          return null;
+        }
+        memoryLaneByKey.set(key, envelope);
+        pendingChromeWrites.set(key, envelope);
+        chromeFlushTimer ??= /** @type {ReturnType<typeof setTimeout>} */
+        globalThis.setTimeout(() => {
+          chromeFlushTimer = null;
+          void flushPendingChrome(chromeStorage);
+        }, 50);
+        try {
+          ls.removeItem(`${ROUTE_CACHE_LEGACY_LS_PREFIX}${laneKey}`);
+        } catch {
+        }
+        return stripUpdatedAt(envelope);
+      } catch {
+        try {
+          ls.removeItem(`${ROUTE_CACHE_LEGACY_LS_PREFIX}${laneKey}`);
+        } catch {
+        }
+      }
+    }
+    return null;
+  }
+  async function writeRouteCacheEntry(opts) {
+    const { laneKey, payload, chromeStorage, localStorage: ls } = opts;
+    if (!laneKey || !payload) {
+      return;
+    }
+    const key = chromeKey(laneKey);
+    const envelope = {
+      ...payload,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    memoryLaneByKey.set(key, envelope);
+    try {
+      ls?.removeItem?.(`${ROUTE_CACHE_LEGACY_LS_PREFIX}${laneKey}`);
+    } catch {
+    }
+    if (!chromeStorage?.set) {
+      try {
+        ls?.setItem?.(key, JSON.stringify(envelope));
+      } catch {
+      }
+      return;
+    }
+    pendingChromeWrites.set(key, envelope);
+    if (chromeFlushTimer) {
+      return;
+    }
+    chromeFlushTimer = /** @type {ReturnType<typeof setTimeout>} */
+    globalThis.setTimeout(async () => {
+      chromeFlushTimer = null;
+      try {
+        await flushPendingChrome(chromeStorage);
+      } catch {
+      }
+    }, 50);
   }
 
   // src/tollguru-tolls.js
@@ -10059,8 +10283,6 @@
   }
 
   // src/routing.js
-  var CACHE_PREFIX = "dat-ext-route-cache-v4:";
-  var CACHE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1e3;
   function shortenTollFailureHint(text, max = 260) {
     const t = String(text || "").replace(/\s+/g, " ").trim();
     if (!t) {
@@ -10188,41 +10410,6 @@
       return null;
     }
   }
-  function readCache(storage, laneKey) {
-    if (!storage || !laneKey) {
-      return null;
-    }
-    try {
-      const raw = storage.getItem(`${CACHE_PREFIX}${laneKey}`);
-      if (!raw) {
-        return null;
-      }
-      const parsed = JSON.parse(raw);
-      const age = Date.now() - Date.parse(parsed?.updatedAt || 0);
-      if (!Number.isFinite(age) || age > CACHE_MAX_AGE_MS) {
-        storage.removeItem(`${CACHE_PREFIX}${laneKey}`);
-        return null;
-      }
-      return parsed;
-    } catch {
-      return null;
-    }
-  }
-  function writeCache(storage, laneKey, payload) {
-    if (!storage || !laneKey || !payload) {
-      return;
-    }
-    try {
-      storage.setItem(
-        `${CACHE_PREFIX}${laneKey}`,
-        JSON.stringify({
-          ...payload,
-          updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-        })
-      );
-    } catch {
-    }
-  }
   function getCitiesUrl(runtime) {
     if (runtime?.getURL) {
       return runtime.getURL("cities.json");
@@ -10257,35 +10444,29 @@
       const method = String(init?.method || "GET").toUpperCase();
       const body = typeof init?.body === "string" ? init.body : init?.body !== void 0 && init?.body !== null ? JSON.stringify(init.body) : void 0;
       if (runtime?.id && typeof runtime.sendMessage === "function") {
-        try {
-          return await new Promise((resolve, reject) => {
-            runtime.sendMessage(
-              {
-                type: "dat-ext:fetch-json",
-                url,
-                method,
-                headers: init.headers || {},
-                body
-              },
-              (response2) => {
-                const runtimeError = runtime.lastError;
-                if (runtimeError) {
-                  reject(new Error(runtimeError.message || "Background fetch failed"));
-                  return;
-                }
-                if (!response2?.ok) {
-                  reject(new Error(response2?.error || "Background fetch failed"));
-                  return;
-                }
-                resolve(response2.data);
+        return await new Promise((resolve, reject) => {
+          runtime.sendMessage(
+            {
+              type: "dat-ext:fetch-json",
+              url,
+              method,
+              headers: init.headers || {},
+              body
+            },
+            (response2) => {
+              const runtimeError = runtime.lastError;
+              if (runtimeError) {
+                reject(new Error(runtimeError.message || "Background fetch failed"));
+                return;
               }
-            );
-          });
-        } catch (error) {
-          if (!fetchImpl) {
-            throw error;
-          }
-        }
+              if (!response2?.ok) {
+                reject(new Error(response2?.error || "Background fetch failed"));
+                return;
+              }
+              resolve(response2.data);
+            }
+          );
+        });
       }
       if (!fetchImpl) {
         throw new Error("No fetch implementation available for routing");
@@ -10695,6 +10876,7 @@
     const fetchImpl = options.fetchImpl || globalThis.fetch?.bind(globalThis);
     const storage = options.storage ?? defaultStorage();
     const runtime = options.runtime ?? globalThis.chrome?.runtime ?? null;
+    const chromeStorage = globalThis.chrome?.storage?.local ?? null;
     const googleApiKey = typeof options.googleApiKey === "string" ? options.googleApiKey.trim() : GOOGLE_MAPS_API_KEY;
     const tollguruApiKey = typeof options.tollguruApiKey === "string" ? options.tollguruApiKey.trim() : "";
     const googleTollFallbackAllowed = typeof options.googleTollFallbackAllowed === "boolean" ? options.googleTollFallbackAllowed : true;
@@ -10734,7 +10916,12 @@
       const forceRefresh = options2?.forceRefresh === true;
       const laneKey = buildLaneKey(origin, destination);
       if (!forceRefresh) {
-        const cached = readCache(storage, laneKey);
+        const cached = await readRouteCacheEntry({
+          laneKey,
+          chromeStorage,
+          localStorage: storage,
+          forceRefresh
+        });
         if (cached) {
           return cached;
         }
@@ -10743,7 +10930,7 @@
       const destinationCoords = await resolveCoordinates(destination);
       if (!originCoords || !destinationCoords) {
         const unavailable = buildUnavailableResult(origin, destination, "Could not geocode this lane.");
-        writeCache(storage, laneKey, unavailable);
+        await writeRouteCacheEntry({ laneKey, payload: unavailable, chromeStorage, localStorage: storage });
         return unavailable;
       }
       if (requestJson) {
@@ -10883,7 +11070,7 @@
             const extra = "TollGuru toll via origin\u2013destination API (complete polyline / TollTally not available for this API key).";
             payload.notes = [...Array.isArray(payload.notes) ? payload.notes : [], extra];
           }
-          writeCache(storage, laneKey, payload);
+          await writeRouteCacheEntry({ laneKey, payload, chromeStorage, localStorage: storage });
           return payload;
         }
         const straightLineMiles2 = haversineMiles(originCoords, destinationCoords);
@@ -10912,7 +11099,7 @@
           mapLineLatLngs: endpointLineLatLngs(originCoords, destinationCoords),
           notes
         };
-        writeCache(storage, laneKey, estimated2);
+        await writeRouteCacheEntry({ laneKey, payload: estimated2, chromeStorage, localStorage: storage });
         return estimated2;
       }
       const straightLineMiles = haversineMiles(originCoords, destinationCoords);
@@ -10932,7 +11119,7 @@
         mapLineLatLngs: endpointLineLatLngs(originCoords, destinationCoords),
         notes: ["No live route source available; using a road-adjusted crow-flight estimate."]
       };
-      writeCache(storage, laneKey, estimated);
+      await writeRouteCacheEntry({ laneKey, payload: estimated, chromeStorage, localStorage: storage });
       return estimated;
     }
     return {
@@ -11482,6 +11669,38 @@
   display: block;
 }
 
+.dat-ext-toast-layer {
+  position: fixed;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100002;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+  max-width: min(92vw, 320px);
+}
+.dat-ext-toast {
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 0.92em;
+  font-weight: 700;
+  line-height: 1.35;
+  box-shadow: 0 4px 18px rgba(16, 24, 40, 0.14);
+  pointer-events: auto;
+}
+.dat-ext-toast--success {
+  background: #ecfdf3;
+  color: #027a48;
+  border: 1px solid #abefc6;
+}
+.dat-ext-toast--error {
+  background: #fef3f2;
+  color: #b42318;
+  border: 1px solid #fecdca;
+}
+
 .notes {
   display: flex;
   flex-direction: column;
@@ -11608,6 +11827,50 @@
   function buildMailto(email, subject, body) {
     const params = new URLSearchParams({ subject, body });
     return `mailto:${email ?? ""}?${params.toString()}`;
+  }
+  function showAssistToast(shadowHost, message, variant = "success") {
+    const root = shadowHost?.shadowRoot;
+    if (!root || !message) {
+      return;
+    }
+    let layer = root.querySelector(".dat-ext-toast-layer");
+    if (!layer) {
+      layer = document.createElement("div");
+      layer.className = "dat-ext-toast-layer";
+      layer.setAttribute("aria-live", "polite");
+      root.appendChild(layer);
+    }
+    const t = document.createElement("div");
+    t.className = `dat-ext-toast dat-ext-toast--${variant}`;
+    t.textContent = message;
+    layer.appendChild(t);
+    globalThis.setTimeout(() => {
+      t.remove();
+      if (layer instanceof HTMLElement && !layer.childElementCount) {
+        layer.remove();
+      }
+    }, 4500);
+  }
+  function sendGmailViaBackground(to, subject, body) {
+    return new Promise((resolve, reject) => {
+      const rt = globalThis.chrome?.runtime;
+      if (!rt?.sendMessage) {
+        reject(new Error("Extension messaging unavailable."));
+        return;
+      }
+      rt.sendMessage({ type: "dat-ext:gmail-send", to, subject, body }, (response) => {
+        const last = typeof chrome !== "undefined" ? chrome.runtime?.lastError : void 0;
+        if (last) {
+          reject(new Error(last.message || "Gmail send failed."));
+          return;
+        }
+        if (!response?.ok) {
+          reject(new Error(response?.error || "Gmail send failed."));
+          return;
+        }
+        resolve(response);
+      });
+    });
   }
   function defaultOfferBody(data) {
     return `Hello ${data.companyName || ""},
@@ -11743,14 +12006,54 @@ Thank you.`;
     const bookingBody = templateMode === "offer" ? offerBodyBase : bookingBodyBase;
     const actions = document.createElement("div");
     actions.className = "actions";
-    actions.append(
-      buildActionButton("Send Offer Email", {
-        disabled: !data.contactEmail,
-        dataRole: "offer-email",
-        onClick: () => {
-          window.location.href = buildMailto(data.contactEmail, offerSubject, offerBody);
+    const offerSend = buildActionButton("Send Offer Email", {
+      disabled: !data.contactEmail,
+      dataRole: "offer-email"
+    });
+    if (data.contactEmail && !offerSend.disabled) {
+      offerSend.addEventListener("click", async () => {
+        offerSend.disabled = true;
+        offerSend.setAttribute("aria-disabled", "true");
+        try {
+          if (!globalThis.chrome?.runtime?.sendMessage) {
+            window.location.href = buildMailto(data.contactEmail, offerSubject, offerBody);
+            return;
+          }
+          await sendGmailViaBackground(data.contactEmail, offerSubject, offerBody);
+          showAssistToast(shadowHost, "Offer email sent.", "success");
+        } catch (error) {
+          showAssistToast(shadowHost, String(error?.message || error || "Send failed."), "error");
+        } finally {
+          offerSend.disabled = false;
+          offerSend.removeAttribute("aria-disabled");
         }
-      }),
+      });
+    }
+    const bookingSend = buildActionButton("Send Booking Email", {
+      disabled: !data.contactEmail,
+      dataRole: "booking-email"
+    });
+    if (data.contactEmail && !bookingSend.disabled) {
+      bookingSend.addEventListener("click", async () => {
+        bookingSend.disabled = true;
+        bookingSend.setAttribute("aria-disabled", "true");
+        try {
+          if (!globalThis.chrome?.runtime?.sendMessage) {
+            window.location.href = buildMailto(data.contactEmail, bookingSubject, bookingBody);
+            return;
+          }
+          await sendGmailViaBackground(data.contactEmail, bookingSubject, bookingBody);
+          showAssistToast(shadowHost, "Booking email sent.", "success");
+        } catch (error) {
+          showAssistToast(shadowHost, String(error?.message || error || "Send failed."), "error");
+        } finally {
+          bookingSend.disabled = false;
+          bookingSend.removeAttribute("aria-disabled");
+        }
+      });
+    }
+    actions.append(
+      offerSend,
       buildActionButton("Open Offer in Gmail", {
         disabled: !data.contactEmail,
         dataRole: "offer-gmail",
@@ -11764,13 +12067,7 @@ Thank you.`;
           }
         }
       }),
-      buildActionButton("Send Booking Email", {
-        disabled: !data.contactEmail,
-        dataRole: "booking-email",
-        onClick: () => {
-          window.location.href = buildMailto(data.contactEmail, bookingSubject, bookingBody);
-        }
-      }),
+      bookingSend,
       buildActionButton("Open Booking in Gmail", {
         disabled: !data.contactEmail,
         dataRole: "booking-gmail",
@@ -11856,14 +12153,33 @@ Thank you.`;
     mapWrap.appendChild(mapCanvas);
     card.appendChild(mapWrap);
     const lineLatLngs = Array.isArray(route?.mapLineLatLngs) ? route.mapLineLatLngs : null;
-    if (lineLatLngs && lineLatLngs.length >= 2) {
-      ctx.mapInstance = mountLaneMap(mapCanvas, lineLatLngs, {
-        searchOriginLatLng: Array.isArray(route?.searchOriginLatLng) ? route.searchOriginLatLng : null,
-        pickupLatLng: Array.isArray(route?.pickupMapLatLng) ? route.pickupMapLatLng : null,
-        deliveryLatLng: Array.isArray(route?.deliveryMapLatLng) ? route.deliveryMapLatLng : null
-      });
-    } else {
-      ctx.mapInstance = null;
+    ctx.mapInstance = null;
+    if (lineLatLngs && lineLatLngs.length >= 2 && !loadingRoute) {
+      const obs = new IntersectionObserver(
+        (entries) => {
+          const hit = entries.some((e) => e.isIntersecting && e.intersectionRatio >= 0.1);
+          if (!hit) {
+            return;
+          }
+          obs.disconnect();
+          if (shadowHost) {
+            shadowHost.__datExtMapObs = null;
+          }
+          ctx.mapInstance = mountLaneMap(mapCanvas, lineLatLngs, {
+            searchOriginLatLng: Array.isArray(route?.searchOriginLatLng) ? route.searchOriginLatLng : null,
+            pickupLatLng: Array.isArray(route?.pickupMapLatLng) ? route.pickupMapLatLng : null,
+            deliveryLatLng: Array.isArray(route?.deliveryMapLatLng) ? route.deliveryMapLatLng : null
+          });
+          if (shadowHost && ctx.mapInstance) {
+            shadowHost.__datExtMap = ctx.mapInstance;
+          }
+        },
+        { threshold: [0, 0.1, 0.25], rootMargin: "0px 0px 120px 0px" }
+      );
+      if (shadowHost) {
+        shadowHost.__datExtMapObs = obs;
+      }
+      obs.observe(mapCanvas);
     }
     if (!ctx.mapInstance) {
       mapCanvas.textContent = loadingRoute ? "Loading route map..." : "Route map unavailable";
@@ -11907,6 +12223,73 @@ Thank you.`;
   // src/detail-panel.js
   function visibleText(element) {
     return String(element?.innerText || element?.textContent || "").replace(/\s+/g, " ").trim();
+  }
+  function isDatLoadDetailExpanded(detailHost) {
+    if (!(detailHost instanceof HTMLElement)) {
+      return true;
+    }
+    if (detailHost.hasAttribute("hidden")) {
+      return false;
+    }
+    if (detailHost.getAttribute("aria-hidden") === "true") {
+      return false;
+    }
+    const expanded = detailHost.getAttribute("aria-expanded");
+    if (expanded === "true") {
+      return true;
+    }
+    if (expanded === "false") {
+      return false;
+    }
+    if (detailHost.hasAttribute("open")) {
+      return true;
+    }
+    const cls = String(detailHost.className || "");
+    if (/\b(expanded|is-open|detail-open|load-details-open|mat-expanded)\b/i.test(cls)) {
+      return true;
+    }
+    const ds = detailHost.dataset;
+    if (ds.expanded === "true" || ds.open === "true") {
+      return true;
+    }
+    return true;
+  }
+  function attachExpandedRouteObserver(detailHost, shadowHost, signature, kick) {
+    const prev = (
+      /** @type {ExpandRouteCtl | null | undefined} */
+      detailHost.__datExtExpandCtl
+    );
+    if (prev && prev.signature === signature) {
+      queueMicrotask(kick);
+      return;
+    }
+    if (prev?.disconnect) {
+      prev.disconnect();
+    }
+    const run = () => {
+      if (!shadowHost.isConnected || !detailHost.isConnected || shadowHost.dataset.signature !== signature) {
+        return;
+      }
+      kick();
+    };
+    const mo = new MutationObserver(run);
+    mo.observe(detailHost, {
+      attributes: true,
+      attributeFilter: ["aria-expanded", "aria-hidden", "hidden", "class", "open", "data-expanded"]
+    });
+    const disconnect = () => {
+      mo.disconnect();
+      const cur = (
+        /** @type {ExpandRouteCtl | null | undefined} */
+        detailHost.__datExtExpandCtl
+      );
+      if (cur?.mo === mo) {
+        detailHost.__datExtExpandCtl = void 0;
+      }
+    };
+    detailHost.__datExtExpandCtl = /** @type {ExpandRouteCtl} */
+    { signature, mo, disconnect };
+    queueMicrotask(run);
   }
   function looksLikeCompanyName(text) {
     return /\b(logistics|freight|transport|trucking|solutions|broker|sales|carrier|shipping|express|inc|llc|corp|co)\b/i.test(
@@ -12077,8 +12460,19 @@ Thank you.`;
   }
   function teardownDetailUi(detailHost) {
     if (!(detailHost instanceof HTMLElement)) return;
+    const expandCtl = (
+      /** @type {{ disconnect?: () => void } | undefined} */
+      detailHost.__datExtExpandCtl
+    );
+    if (expandCtl?.disconnect) {
+      expandCtl.disconnect();
+    }
     removeAllTomRows(detailHost);
     for (const stalePanel of detailHost.querySelectorAll(`.${TOM_PANEL_CLASS}`)) {
+      if (stalePanel.__datExtMapObs && typeof stalePanel.__datExtMapObs.disconnect === "function") {
+        stalePanel.__datExtMapObs.disconnect();
+        stalePanel.__datExtMapObs = null;
+      }
       if (stalePanel.__datExtMap) {
         destroyLaneMap(stalePanel.__datExtMap);
         stalePanel.__datExtMap = null;
@@ -12127,6 +12521,10 @@ Thank you.`;
     return { host, shadow, card };
   }
   function safeRender(host, card, data, route, loadingRoute, offerTpl, bookingTpl, templateMode, onRefreshRoute, renderExtras = {}) {
+    if (host.__datExtMapObs && typeof host.__datExtMapObs.disconnect === "function") {
+      host.__datExtMapObs.disconnect();
+      host.__datExtMapObs = null;
+    }
     if (host.__datExtMap) {
       destroyLaneMap(host.__datExtMap);
       host.__datExtMap = null;
@@ -12263,9 +12661,19 @@ Thank you.`;
         refreshRoute,
         renderExtras
       );
-      if (!routeData && !isLoadingRoute && routeInspector) {
-        requestRoute(false);
-      }
+      attachExpandedRouteObserver(detailHost, shadowHost, signature, () => {
+        if (!isDatLoadDetailExpanded(detailHost)) {
+          return;
+        }
+        if (!routeInspector) {
+          return;
+        }
+        const rd = shadowHost.__datExtRouteData ?? null;
+        const loading = shadowHost.dataset.loadingRoute === "true";
+        if (!rd && !loading) {
+          requestRoute(false);
+        }
+      });
     }
   }
 

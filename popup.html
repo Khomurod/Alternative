@@ -92,17 +92,16 @@
       #test-tollguru:hover {
         filter: brightness(0.98);
       }
-        width: 100%;
-        box-sizing: border-box;
-        padding: 8px;
-        border: 1px solid #d0d5dd;
-        border-radius: 8px;
-        font: inherit;
-      }
     </style>
   </head>
   <body>
     <h1>DAT Dispatcher Assist</h1>
+    <p class="hint">
+      <strong>Gmail send from the board:</strong> after this update Chrome will ask again for OAuth. The narrow
+      <code>gmail.send</code>
+      permission is required, and <strong>Gmail API</strong> must be enabled on the OAuth client project in Google
+      Cloud Console. If send fails, use “Open … in Gmail” as a fallback.
+    </p>
     <p class="hint">
       Optional email bodies for the load detail buttons. Leave blank to use built-in text. Placeholders:
       <code>{{company}}</code>, <code>{{origin}}</code>, <code>{{destination}}</code>, <code>{{email}}</code>

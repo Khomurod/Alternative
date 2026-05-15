@@ -407,6 +407,38 @@ function buildColumnStyles(typography, gridCell) {
   display: block;
 }
 
+.dat-ext-toast-layer {
+  position: fixed;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100002;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+  max-width: min(92vw, 320px);
+}
+.dat-ext-toast {
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 0.92em;
+  font-weight: 700;
+  line-height: 1.35;
+  box-shadow: 0 4px 18px rgba(16, 24, 40, 0.14);
+  pointer-events: auto;
+}
+.dat-ext-toast--success {
+  background: #ecfdf3;
+  color: #027a48;
+  border: 1px solid #abefc6;
+}
+.dat-ext-toast--error {
+  background: #fef3f2;
+  color: #b42318;
+  border: 1px solid #fecdca;
+}
+
 .notes {
   display: flex;
   flex-direction: column;
@@ -550,6 +582,62 @@ function buildTollMetricDisplayField(label, mainValue, subtitle, dataRole, optio
 function buildMailto(email, subject, body) {
   const params = new URLSearchParams({ subject, body });
   return `mailto:${email ?? ""}?${params.toString()}`;
+}
+
+/**
+ * @param {HTMLElement | null | undefined} shadowHost
+ * @param {string} message
+ * @param {"success" | "error"} variant
+ */
+function showAssistToast(shadowHost, message, variant = "success") {
+  const root = shadowHost?.shadowRoot;
+  if (!root || !message) {
+    return;
+  }
+  let layer = root.querySelector(".dat-ext-toast-layer");
+  if (!layer) {
+    layer = document.createElement("div");
+    layer.className = "dat-ext-toast-layer";
+    layer.setAttribute("aria-live", "polite");
+    root.appendChild(layer);
+  }
+  const t = document.createElement("div");
+  t.className = `dat-ext-toast dat-ext-toast--${variant}`;
+  t.textContent = message;
+  layer.appendChild(t);
+  globalThis.setTimeout(() => {
+    t.remove();
+    if (layer instanceof HTMLElement && !layer.childElementCount) {
+      layer.remove();
+    }
+  }, 4500);
+}
+
+/**
+ * @param {string} to
+ * @param {string} subject
+ * @param {string} body
+ */
+function sendGmailViaBackground(to, subject, body) {
+  return new Promise((resolve, reject) => {
+    const rt = globalThis.chrome?.runtime;
+    if (!rt?.sendMessage) {
+      reject(new Error("Extension messaging unavailable."));
+      return;
+    }
+    rt.sendMessage({ type: "dat-ext:gmail-send", to, subject, body }, (response) => {
+      const last = typeof chrome !== "undefined" ? chrome.runtime?.lastError : undefined;
+      if (last) {
+        reject(new Error(last.message || "Gmail send failed."));
+        return;
+      }
+      if (!response?.ok) {
+        reject(new Error(response?.error || "Gmail send failed."));
+        return;
+      }
+      resolve(response);
+    });
+  });
 }
 
 function defaultOfferBody(data) {
@@ -719,14 +807,57 @@ export function renderColumn(card, ctx) {
 
   const actions = document.createElement("div");
   actions.className = "actions";
-  actions.append(
-    buildActionButton("Send Offer Email", {
-      disabled: !data.contactEmail,
-      dataRole: "offer-email",
-      onClick: () => {
-        window.location.href = buildMailto(data.contactEmail, offerSubject, offerBody);
+
+  const offerSend = buildActionButton("Send Offer Email", {
+    disabled: !data.contactEmail,
+    dataRole: "offer-email"
+  });
+  if (data.contactEmail && !offerSend.disabled) {
+    offerSend.addEventListener("click", async () => {
+      offerSend.disabled = true;
+      offerSend.setAttribute("aria-disabled", "true");
+      try {
+        if (!globalThis.chrome?.runtime?.sendMessage) {
+          window.location.href = buildMailto(data.contactEmail, offerSubject, offerBody);
+          return;
+        }
+        await sendGmailViaBackground(data.contactEmail, offerSubject, offerBody);
+        showAssistToast(shadowHost, "Offer email sent.", "success");
+      } catch (error) {
+        showAssistToast(shadowHost, String(error?.message || error || "Send failed."), "error");
+      } finally {
+        offerSend.disabled = false;
+        offerSend.removeAttribute("aria-disabled");
       }
-    }),
+    });
+  }
+
+  const bookingSend = buildActionButton("Send Booking Email", {
+    disabled: !data.contactEmail,
+    dataRole: "booking-email"
+  });
+  if (data.contactEmail && !bookingSend.disabled) {
+    bookingSend.addEventListener("click", async () => {
+      bookingSend.disabled = true;
+      bookingSend.setAttribute("aria-disabled", "true");
+      try {
+        if (!globalThis.chrome?.runtime?.sendMessage) {
+          window.location.href = buildMailto(data.contactEmail, bookingSubject, bookingBody);
+          return;
+        }
+        await sendGmailViaBackground(data.contactEmail, bookingSubject, bookingBody);
+        showAssistToast(shadowHost, "Booking email sent.", "success");
+      } catch (error) {
+        showAssistToast(shadowHost, String(error?.message || error || "Send failed."), "error");
+      } finally {
+        bookingSend.disabled = false;
+        bookingSend.removeAttribute("aria-disabled");
+      }
+    });
+  }
+
+  actions.append(
+    offerSend,
     buildActionButton("Open Offer in Gmail", {
       disabled: !data.contactEmail,
       dataRole: "offer-gmail",
@@ -740,13 +871,7 @@ export function renderColumn(card, ctx) {
         }
       }
     }),
-    buildActionButton("Send Booking Email", {
-      disabled: !data.contactEmail,
-      dataRole: "booking-email",
-      onClick: () => {
-        window.location.href = buildMailto(data.contactEmail, bookingSubject, bookingBody);
-      }
-    }),
+    bookingSend,
     buildActionButton("Open Booking in Gmail", {
       disabled: !data.contactEmail,
       dataRole: "booking-gmail",
@@ -841,15 +966,35 @@ export function renderColumn(card, ctx) {
   card.appendChild(mapWrap);
 
   const lineLatLngs = Array.isArray(route?.mapLineLatLngs) ? route.mapLineLatLngs : null;
-  if (lineLatLngs && lineLatLngs.length >= 2) {
-    ctx.mapInstance = mountLaneMap(mapCanvas, lineLatLngs, {
-      searchOriginLatLng: Array.isArray(route?.searchOriginLatLng) ? route.searchOriginLatLng : null,
-      pickupLatLng: Array.isArray(route?.pickupMapLatLng) ? route.pickupMapLatLng : null,
-      deliveryLatLng: Array.isArray(route?.deliveryMapLatLng) ? route.deliveryMapLatLng : null
-    });
-  } else {
-    ctx.mapInstance = null;
+  ctx.mapInstance = null;
+  if (lineLatLngs && lineLatLngs.length >= 2 && !loadingRoute) {
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const hit = entries.some((e) => e.isIntersecting && e.intersectionRatio >= 0.1);
+        if (!hit) {
+          return;
+        }
+        obs.disconnect();
+        if (shadowHost) {
+          shadowHost.__datExtMapObs = null;
+        }
+        ctx.mapInstance = mountLaneMap(mapCanvas, lineLatLngs, {
+          searchOriginLatLng: Array.isArray(route?.searchOriginLatLng) ? route.searchOriginLatLng : null,
+          pickupLatLng: Array.isArray(route?.pickupMapLatLng) ? route.pickupMapLatLng : null,
+          deliveryLatLng: Array.isArray(route?.deliveryMapLatLng) ? route.deliveryMapLatLng : null
+        });
+        if (shadowHost && ctx.mapInstance) {
+          shadowHost.__datExtMap = ctx.mapInstance;
+        }
+      },
+      { threshold: [0, 0.1, 0.25], rootMargin: "0px 0px 120px 0px" }
+    );
+    if (shadowHost) {
+      shadowHost.__datExtMapObs = obs;
+    }
+    obs.observe(mapCanvas);
   }
+
   if (!ctx.mapInstance) {
     mapCanvas.textContent = loadingRoute ? "Loading route map..." : "Route map unavailable";
   }

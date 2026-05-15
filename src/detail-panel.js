@@ -21,6 +21,88 @@ function visibleText(element) {
   return String(element?.innerText || element?.textContent || "").replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Heuristic for whether a `dat-load-details` host is user-expanded (reduces scroll-time routing).
+ * If `aria-expanded` is missing we treat the panel as expanded for compatibility with older DAT builds.
+ *
+ * @param {Element | null | undefined} detailHost
+ */
+export function isDatLoadDetailExpanded(detailHost) {
+  if (!(detailHost instanceof HTMLElement)) {
+    return true;
+  }
+  if (detailHost.hasAttribute("hidden")) {
+    return false;
+  }
+  if (detailHost.getAttribute("aria-hidden") === "true") {
+    return false;
+  }
+  const expanded = detailHost.getAttribute("aria-expanded");
+  if (expanded === "true") {
+    return true;
+  }
+  if (expanded === "false") {
+    return false;
+  }
+  if (detailHost.hasAttribute("open")) {
+    return true;
+  }
+  const cls = String(detailHost.className || "");
+  if (/\b(expanded|is-open|detail-open|load-details-open|mat-expanded)\b/i.test(cls)) {
+    return true;
+  }
+  const ds = detailHost.dataset;
+  if (ds.expanded === "true" || ds.open === "true") {
+    return true;
+  }
+  return true;
+}
+
+/**
+ * @typedef {{ signature: string, mo: MutationObserver, disconnect: () => void }} ExpandRouteCtl
+ */
+
+/**
+ * @param {HTMLElement} detailHost
+ * @param {HTMLElement} shadowHost
+ * @param {string} signature
+ * @param {() => void} kick
+ */
+function attachExpandedRouteObserver(detailHost, shadowHost, signature, kick) {
+  const prev = /** @type {ExpandRouteCtl | null | undefined} */ (detailHost.__datExtExpandCtl);
+  if (prev && prev.signature === signature) {
+    queueMicrotask(kick);
+    return;
+  }
+  if (prev?.disconnect) {
+    prev.disconnect();
+  }
+
+  const run = () => {
+    if (!shadowHost.isConnected || !detailHost.isConnected || shadowHost.dataset.signature !== signature) {
+      return;
+    }
+    kick();
+  };
+
+  const mo = new MutationObserver(run);
+  mo.observe(detailHost, {
+    attributes: true,
+    attributeFilter: ["aria-expanded", "aria-hidden", "hidden", "class", "open", "data-expanded"]
+  });
+
+  const disconnect = () => {
+    mo.disconnect();
+    const cur = /** @type {ExpandRouteCtl | null | undefined} */ (detailHost.__datExtExpandCtl);
+    if (cur?.mo === mo) {
+      detailHost.__datExtExpandCtl = undefined;
+    }
+  };
+
+  detailHost.__datExtExpandCtl = /** @type {ExpandRouteCtl} */ ({ signature, mo, disconnect });
+  queueMicrotask(run);
+}
+
 function looksLikeCompanyName(text) {
   return /\b(logistics|freight|transport|trucking|solutions|broker|sales|carrier|shipping|express|inc|llc|corp|co)\b/i.test(
     text
@@ -268,8 +350,17 @@ export function extractLoadDetailData(detailHost) {
 
 function teardownDetailUi(detailHost) {
   if (!(detailHost instanceof HTMLElement)) return;
+  const expandCtl = /** @type {{ disconnect?: () => void } | undefined} */ (detailHost.__datExtExpandCtl);
+  if (expandCtl?.disconnect) {
+    expandCtl.disconnect();
+  }
+
   removeAllTomRows(detailHost);
   for (const stalePanel of detailHost.querySelectorAll(`.${TOM_PANEL_CLASS}`)) {
+    if (stalePanel.__datExtMapObs && typeof stalePanel.__datExtMapObs.disconnect === "function") {
+      stalePanel.__datExtMapObs.disconnect();
+      stalePanel.__datExtMapObs = null;
+    }
     if (stalePanel.__datExtMap) {
       destroyLaneMap(stalePanel.__datExtMap);
       stalePanel.__datExtMap = null;
@@ -331,6 +422,10 @@ function ensureAssistMount(detailHost) {
 }
 
 function safeRender(host, card, data, route, loadingRoute, offerTpl, bookingTpl, templateMode, onRefreshRoute, renderExtras = {}) {
+  if (host.__datExtMapObs && typeof host.__datExtMapObs.disconnect === "function") {
+    host.__datExtMapObs.disconnect();
+    host.__datExtMapObs = null;
+  }
   if (host.__datExtMap) {
     destroyLaneMap(host.__datExtMap);
     host.__datExtMap = null;
@@ -477,8 +572,18 @@ export function enhanceLoadDetails(doc, context) {
       renderExtras
     );
 
-    if (!routeData && !isLoadingRoute && routeInspector) {
-      requestRoute(false);
-    }
+    attachExpandedRouteObserver(detailHost, shadowHost, signature, () => {
+      if (!isDatLoadDetailExpanded(detailHost)) {
+        return;
+      }
+      if (!routeInspector) {
+        return;
+      }
+      const rd = shadowHost.__datExtRouteData ?? null;
+      const loading = shadowHost.dataset.loadingRoute === "true";
+      if (!rd && !loading) {
+        requestRoute(false);
+      }
+    });
   }
 }

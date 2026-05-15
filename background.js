@@ -1,7 +1,9 @@
 import { DAT_EXT_USER_ACCOUNT_EMAIL_KEY } from "./src/google-account.js";
 import { validateFetchUrl } from "./src/fetch-url-guard.js";
+import { buildGmailApiRaw, snippetForLogs, validateGmailSendPayload } from "./src/gmail-send.js";
 
 const GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
+const GMAIL_SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
 
 chrome.runtime.onInstalled.addListener((details) => {
   console.info("[DAT Dispatcher Assist] Extension installed:", details.reason);
@@ -33,6 +35,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleFetchJson(message)
       .then((data) => sendResponse({ ok: true, data }))
       .catch((error) => sendResponse({ ok: false, error: String(error?.message || error || "Fetch failed") }));
+    return true;
+  }
+
+  if (message?.type === "dat-ext:gmail-send") {
+    handleGmailSend(message)
+      .then((result) => sendResponse(result))
+      .catch((error) => {
+        const msg = String(error?.message || error || "Gmail send failed");
+        if (isOAuthCancelled(msg)) {
+          sendResponse({ ok: false, cancelled: true, error: msg });
+          return;
+        }
+        sendResponse({ ok: false, error: msg });
+      });
     return true;
   }
 
@@ -84,8 +100,16 @@ async function handleGoogleLogin() {
  * @returns {Promise<string>}
  */
 function getAuthTokenInteractive() {
+  return getAuthToken({ interactive: true });
+}
+
+/**
+ * @param {{ interactive: boolean }} opts
+ * @returns {Promise<string>}
+ */
+function getAuthToken(opts) {
   return new Promise((resolve, reject) => {
-    chrome.identity.getAuthToken({ interactive: true }, (token) => {
+    chrome.identity.getAuthToken(opts, (token) => {
       const runtimeError = chrome.runtime.lastError;
       if (runtimeError) {
         reject(new Error(runtimeError.message || "Failed to obtain Google auth token"));
@@ -98,6 +122,71 @@ function getAuthTokenInteractive() {
       resolve(token);
     });
   });
+}
+
+/**
+ * @param {string | null | undefined} token
+ * @returns {Promise<void>}
+ */
+function removeCachedToken(token) {
+  return new Promise((resolve) => {
+    if (!token) {
+      resolve();
+      return;
+    }
+    chrome.identity.removeCachedAuthToken({ token }, () => resolve());
+  });
+}
+
+/**
+ * @param {*} message
+ * @returns {Promise<{ ok: true, id?: string } | { ok: false, error: string, cancelled?: boolean }>}
+ */
+async function handleGmailSend(message) {
+  const { to, subject, body } = validateGmailSendPayload(message);
+  const raw = buildGmailApiRaw({ to, subject, body });
+  console.info("[DAT Dispatcher Assist] Gmail send:", {
+    to,
+    subjectLen: subject.length,
+    bodySnippet: snippetForLogs(body)
+  });
+
+  /** @type {string | undefined} */
+  let token;
+  try {
+    token = await getAuthToken({ interactive: false });
+  } catch {
+    token = await getAuthToken({ interactive: true });
+  }
+
+  async function postSend(t) {
+    return fetch(GMAIL_SEND_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${t}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ raw })
+    });
+  }
+
+  let response = await postSend(token);
+
+  if (response.status === 401) {
+    await removeCachedToken(token);
+    token = await getAuthTokenInteractive();
+    response = await postSend(token);
+  }
+
+  if (!response.ok) {
+    const detail = await readFailedFetchDetail(response.status, response);
+    throw new Error(detail.replace(/^HTTP \d+/, "Gmail send failed"));
+  }
+
+  const data = await response.json().catch(() => null);
+  const id = typeof data?.id === "string" ? data.id : undefined;
+
+  return { ok: true, id };
 }
 
 /**

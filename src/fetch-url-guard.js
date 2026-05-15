@@ -1,5 +1,6 @@
 /** Hostnames allowed for `dat-ext:fetch-json` background proxy requests. */
 export const ALLOWED_FETCH_HOSTNAMES = [
+  "gmail.googleapis.com",
   "apis.tollguru.com",
   "maps.googleapis.com",
   "routes.googleapis.com",

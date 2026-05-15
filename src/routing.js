@@ -1,10 +1,8 @@
 import { sanitizeLocationText } from "./parsers.js";
 import { GOOGLE_MAPS_API_KEY } from "./google-api-key.js";
 import { DEFAULT_TOLLGURU_VEHICLE_TYPE } from "./tollguru-api-key.js";
+import { readRouteCacheEntry, writeRouteCacheEntry } from "./route-cache-storage.js";
 import { fetchTollGuruLaneTolls } from "./tollguru-tolls.js";
-
-const CACHE_PREFIX = "dat-ext-route-cache-v4:";
-const CACHE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 
 /** @param {string} text @param {number} max */
 function shortenTollFailureHint(text, max = 260) {
@@ -154,48 +152,6 @@ function defaultStorage() {
   }
 }
 
-function readCache(storage, laneKey) {
-  if (!storage || !laneKey) {
-    return null;
-  }
-
-  try {
-    const raw = storage.getItem(`${CACHE_PREFIX}${laneKey}`);
-    if (!raw) {
-      return null;
-    }
-
-    const parsed = JSON.parse(raw);
-    const age = Date.now() - Date.parse(parsed?.updatedAt || 0);
-    if (!Number.isFinite(age) || age > CACHE_MAX_AGE_MS) {
-      storage.removeItem(`${CACHE_PREFIX}${laneKey}`);
-      return null;
-    }
-
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function writeCache(storage, laneKey, payload) {
-  if (!storage || !laneKey || !payload) {
-    return;
-  }
-
-  try {
-    storage.setItem(
-      `${CACHE_PREFIX}${laneKey}`,
-      JSON.stringify({
-        ...payload,
-        updatedAt: new Date().toISOString()
-      })
-    );
-  } catch {
-    /* Ignore storage quota failures */
-  }
-}
-
 function getCitiesUrl(runtime) {
   if (runtime?.getURL) {
     return runtime.getURL("cities.json");
@@ -251,37 +207,31 @@ function buildRequestJson({ fetchImpl, runtime }) {
         : undefined;
 
     if (runtime?.id && typeof runtime.sendMessage === "function") {
-      try {
-        return await new Promise((resolve, reject) => {
-          runtime.sendMessage(
-            {
-              type: "dat-ext:fetch-json",
-              url,
-              method,
-              headers: init.headers || {},
-              body
-            },
-            (response) => {
-              const runtimeError = runtime.lastError;
-              if (runtimeError) {
-                reject(new Error(runtimeError.message || "Background fetch failed"));
-                return;
-              }
-
-              if (!response?.ok) {
-                reject(new Error(response?.error || "Background fetch failed"));
-                return;
-              }
-
-              resolve(response.data);
+      return await new Promise((resolve, reject) => {
+        runtime.sendMessage(
+          {
+            type: "dat-ext:fetch-json",
+            url,
+            method,
+            headers: init.headers || {},
+            body
+          },
+          (response) => {
+            const runtimeError = runtime.lastError;
+            if (runtimeError) {
+              reject(new Error(runtimeError.message || "Background fetch failed"));
+              return;
             }
-          );
-        });
-      } catch (error) {
-        if (!fetchImpl) {
-          throw error;
-        }
-      }
+
+            if (!response?.ok) {
+              reject(new Error(response?.error || "Background fetch failed"));
+              return;
+            }
+
+            resolve(response.data);
+          }
+        );
+      });
     }
 
     if (!fetchImpl) {
@@ -784,6 +734,7 @@ export function createRouteInspector(options = {}) {
   const fetchImpl = options.fetchImpl || globalThis.fetch?.bind(globalThis);
   const storage = options.storage ?? defaultStorage();
   const runtime = options.runtime ?? globalThis.chrome?.runtime ?? null;
+  const chromeStorage = globalThis.chrome?.storage?.local ?? null;
   const googleApiKey =
     typeof options.googleApiKey === "string" ? options.googleApiKey.trim() : GOOGLE_MAPS_API_KEY;
   const tollguruApiKey =
@@ -845,7 +796,12 @@ export function createRouteInspector(options = {}) {
     const forceRefresh = options?.forceRefresh === true;
     const laneKey = buildLaneKey(origin, destination);
     if (!forceRefresh) {
-      const cached = readCache(storage, laneKey);
+      const cached = await readRouteCacheEntry({
+        laneKey,
+        chromeStorage,
+        localStorage: storage,
+        forceRefresh
+      });
       if (cached) {
         return cached;
       }
@@ -856,7 +812,7 @@ export function createRouteInspector(options = {}) {
 
     if (!originCoords || !destinationCoords) {
       const unavailable = buildUnavailableResult(origin, destination, "Could not geocode this lane.");
-      writeCache(storage, laneKey, unavailable);
+      await writeRouteCacheEntry({ laneKey, payload: unavailable, chromeStorage, localStorage: storage });
       return unavailable;
     }
 
@@ -1037,7 +993,7 @@ export function createRouteInspector(options = {}) {
           payload.notes = [...(Array.isArray(payload.notes) ? payload.notes : []), extra];
         }
 
-        writeCache(storage, laneKey, payload);
+        await writeRouteCacheEntry({ laneKey, payload, chromeStorage, localStorage: storage });
         return payload;
       }
 
@@ -1067,7 +1023,7 @@ export function createRouteInspector(options = {}) {
         mapLineLatLngs: endpointLineLatLngs(originCoords, destinationCoords),
         notes
       };
-      writeCache(storage, laneKey, estimated);
+      await writeRouteCacheEntry({ laneKey, payload: estimated, chromeStorage, localStorage: storage });
       return estimated;
     }
 
@@ -1088,7 +1044,7 @@ export function createRouteInspector(options = {}) {
       mapLineLatLngs: endpointLineLatLngs(originCoords, destinationCoords),
       notes: ["No live route source available; using a road-adjusted crow-flight estimate."]
     };
-    writeCache(storage, laneKey, estimated);
+    await writeRouteCacheEntry({ laneKey, payload: estimated, chromeStorage, localStorage: storage });
     return estimated;
   }
 
