@@ -175,6 +175,31 @@ describe("createColumnDOM", () => {
     expect(card.querySelector('[data-role="rpm"]')).toBeTruthy();
     expect(card.querySelector(".actions")).toBeTruthy();
   });
+
+  it("shows Sending from label when userAccountEmail is set", () => {
+    const { card } = createColumnDOM(document, { gridCell: true });
+    renderColumn(card, {
+      data: {
+        origin: "A",
+        destination: "B",
+        tripMiles: 100,
+        rateDollars: 500,
+        rpmHint: 5,
+        companyName: "Co",
+        contactEmail: "a@b.com"
+      },
+      route: null,
+      loadingRoute: false,
+      offerTpl: "",
+      bookingTpl: "",
+      templateMode: "default",
+      shadowHost: null,
+      onRefreshRoute: null,
+      userAccountEmail: "dispatcher@gmail.com",
+      mapInstance: null
+    });
+    expect(card.textContent).toContain("Sending from: dispatcher@gmail.com");
+  });
 });
 
 describe("stable class names", () => {

@@ -407,6 +407,21 @@ function buildColumnStyles(typography, gridCell) {
   opacity: 0.72;
 }
 
+.sender-account {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.sender-account__label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #60708a;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 @media (max-width: 980px) {
   .actions {
     width: 100%;
@@ -617,8 +632,22 @@ function formatUserRateInputValue(value) {
  * @param {object} ctx
  */
 export function renderColumn(card, ctx) {
-  const { data, route, loadingRoute, offerTpl, bookingTpl, templateMode, shadowHost, onRefreshRoute } = ctx;
+  const {
+    data,
+    route,
+    loadingRoute,
+    offerTpl,
+    bookingTpl,
+    templateMode,
+    shadowHost,
+    onRefreshRoute,
+    userAccountEmail = "",
+    onRequestGoogleLogin = null
+  } = ctx;
   card.replaceChildren();
+
+  const senderEmail = String(userAccountEmail || "").trim();
+  const gmailComposeOptions = { userAccountEmail: senderEmail };
 
   const roadMiles =
     !loadingRoute &&
@@ -675,7 +704,7 @@ export function renderColumn(card, ctx) {
       dataRole: "offer-gmail",
       variant: "ghost",
       onClick: () => {
-        const picked = pickGmailComposeOrMailto(data.contactEmail, offerSubject, offerBody);
+        const picked = pickGmailComposeOrMailto(data.contactEmail, offerSubject, offerBody, gmailComposeOptions);
         if (picked.usedGmail) {
           window.open(picked.href, "_blank", "noopener,noreferrer");
         } else {
@@ -695,7 +724,7 @@ export function renderColumn(card, ctx) {
       dataRole: "booking-gmail",
       variant: "ghost",
       onClick: () => {
-        const picked = pickGmailComposeOrMailto(data.contactEmail, bookingSubject, bookingBody);
+        const picked = pickGmailComposeOrMailto(data.contactEmail, bookingSubject, bookingBody, gmailComposeOptions);
         if (picked.usedGmail) {
           window.open(picked.href, "_blank", "noopener,noreferrer");
         } else {
@@ -731,7 +760,26 @@ export function renderColumn(card, ctx) {
 
   const top = document.createElement("div");
   top.className = "panel-header";
-  top.append(buildTextEl("span", "title", "Load Intelligence"), actions);
+
+  const senderAccount = document.createElement("div");
+  senderAccount.className = "sender-account";
+  if (senderEmail) {
+    const senderLabel = document.createElement("div");
+    senderLabel.className = "sender-account__label";
+    senderLabel.textContent = `Sending from: ${senderEmail}`;
+    senderAccount.appendChild(senderLabel);
+  } else {
+    senderAccount.appendChild(
+      buildActionButton("⚠️ Sign in to Gmail for one-click compose", {
+        variant: "ghost",
+        dataRole: "gmail-signin",
+        onClick: typeof onRequestGoogleLogin === "function" ? onRequestGoogleLogin : undefined,
+        disabled: typeof onRequestGoogleLogin !== "function"
+      })
+    );
+  }
+
+  top.append(buildTextEl("span", "title", "Load Intelligence"), senderAccount, actions);
 
   card.append(top, metricsCluster);
 

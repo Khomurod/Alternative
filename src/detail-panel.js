@@ -304,7 +304,7 @@ function ensureAssistMount(detailHost) {
   return { host, shadow, card };
 }
 
-function safeRender(host, card, data, route, loadingRoute, offerTpl, bookingTpl, templateMode, onRefreshRoute) {
+function safeRender(host, card, data, route, loadingRoute, offerTpl, bookingTpl, templateMode, onRefreshRoute, renderExtras = {}) {
   if (host.__datExtMap) {
     destroyLaneMap(host.__datExtMap);
     host.__datExtMap = null;
@@ -318,6 +318,8 @@ function safeRender(host, card, data, route, loadingRoute, offerTpl, bookingTpl,
     bookingTpl,
     templateMode,
     onRefreshRoute,
+    userAccountEmail: renderExtras.userAccountEmail ?? "",
+    onRequestGoogleLogin: renderExtras.onRequestGoogleLogin ?? null,
     mapInstance: null
   };
   renderColumn(card, ctx);
@@ -332,6 +334,10 @@ export function enhanceLoadDetails(doc, context) {
   const bookingTpl = context.emailBookingTemplate ?? "";
   const templateMode = context.emailTemplateMode ?? "default";
   const routeInspector = context.routeInspector ?? null;
+  const renderExtras = {
+    userAccountEmail: context.userAccountEmail ?? "",
+    onRequestGoogleLogin: context.onRequestGoogleLogin ?? null
+  };
 
   for (const host of hosts) {
     const detailHost = /** @type {HTMLElement} */ (host);
@@ -377,7 +383,8 @@ export function enhanceLoadDetails(doc, context) {
         offerTpl,
         bookingTpl,
         templateMode,
-        refreshRoute
+        refreshRoute,
+        renderExtras
       );
 
       Promise.resolve(
@@ -395,7 +402,7 @@ export function enhanceLoadDetails(doc, context) {
           }
           shadowHost.__datExtRouteData = route;
           shadowHost.dataset.loadingRoute = "false";
-          safeRender(shadowHost, card, data, route, false, offerTpl, bookingTpl, templateMode, refreshRoute);
+          safeRender(shadowHost, card, data, route, false, offerTpl, bookingTpl, templateMode, refreshRoute, renderExtras);
         })
         .catch((error) => {
           if (!shadowHost.isConnected || shadowHost.dataset.signature !== signature) {
@@ -420,7 +427,8 @@ export function enhanceLoadDetails(doc, context) {
             offerTpl,
             bookingTpl,
             templateMode,
-            refreshRoute
+            refreshRoute,
+            renderExtras
           );
         });
     };
@@ -428,7 +436,18 @@ export function enhanceLoadDetails(doc, context) {
 
     const routeData = shadowHost.__datExtRouteData || null;
     const isLoadingRoute = shadowHost.dataset.loadingRoute === "true";
-    safeRender(shadowHost, card, data, routeData, isLoadingRoute, offerTpl, bookingTpl, templateMode, refreshRoute);
+    safeRender(
+      shadowHost,
+      card,
+      data,
+      routeData,
+      isLoadingRoute,
+      offerTpl,
+      bookingTpl,
+      templateMode,
+      refreshRoute,
+      renderExtras
+    );
 
     if (!routeData && !isLoadingRoute && routeInspector) {
       requestRoute(false);

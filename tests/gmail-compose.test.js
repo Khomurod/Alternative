@@ -11,6 +11,11 @@ import {
 } from "../src/gmail-compose.js";
 
 describe("gmail-compose", () => {
+  it("sets authuser when userAccountEmail is provided", () => {
+    const url = new URL(buildGmailComposeUrl("broker@example.com", "Hi", "Body", { userAccountEmail: "me@gmail.com" }));
+    expect(url.searchParams.get("authuser")).toBe("me@gmail.com");
+  });
+
   it("builds Gmail compose URL with view=cm, fs=1, to, su, body", () => {
     const url = new URL(
       buildGmailComposeUrl("broker@example.com", "Hello there", "Line one\nLine two")

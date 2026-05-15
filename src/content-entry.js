@@ -2,6 +2,7 @@ import { enhanceLoadDetails, findLaneRowFromLoadDetails } from "./detail-panel.j
 import { buildGoogleDirectionsUrlForRow } from "./directions-from-row.js";
 import { EMAIL_BOOKING_TEMPLATE_KEY, EMAIL_OFFER_TEMPLATE_KEY } from "./email-template.js";
 import { DAT_EXT_NUMEO_COLUMN_KEY, defaultNumeoColumnEnabled } from "./feature-flags.js";
+import { DAT_EXT_USER_ACCOUNT_EMAIL_KEY } from "./google-account.js";
 import { DAT_EXT_TOLLGURU_API_KEY, getEffectiveTollGuruApiKey } from "./tollguru-api-key.js";
 import { queryDeepAll } from "./dom-deep.js";
 import { findDatOneViewport } from "./dat-one-virtual.js";
@@ -59,7 +60,8 @@ const state = {
   emailUiState: {
     selectedEmail: "",
     selectedTemplate: "default"
-  }
+  },
+  userAccountEmail: ""
 };
 
 bootstrap();
@@ -73,6 +75,7 @@ function bootstrap() {
   rebuildRouteInspector();
   loadNumeoColumnPreference();
   loadTollguruApiKeyFromStorage();
+  loadUserAccountEmailFromStorage();
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", start, { once: true });
@@ -89,6 +92,7 @@ function start() {
   attachEmailTemplateListener();
   attachNumeoColumnPreferenceListener();
   attachTollguruApiKeyListener();
+  attachUserAccountEmailListener();
   attachRouteIconDirectionsListener();
   attachRowSummaryDirectionsListener();
   startObserver();
@@ -312,7 +316,9 @@ function scheduleScan(immediate) {
         emailBookingTemplate: state.emailBookingTemplate,
         emailTemplateMode: state.emailUiState.selectedTemplate,
         selectedSenderEmail: state.emailUiState.selectedEmail,
-        numeroColumnEnabled: state.numeroColumnEnabled
+        numeroColumnEnabled: state.numeroColumnEnabled,
+        userAccountEmail: state.userAccountEmail,
+        onRequestGoogleLogin: requestGoogleLogin
       });
 
       injectRowSummaryDirectionAnchors(document);
@@ -500,8 +506,92 @@ function injectHeaderTools() {
   state.templateSelectEl = panel.querySelector('[data-field="template-select"]');
 
   syncCompactEmailOptions(panel);
+  syncConnectEmailButton(panel);
   bindInputsIfNeeded();
   refreshApplyButtonState(panel);
+}
+
+function loadUserAccountEmailFromStorage() {
+  if (!globalThis.chrome?.storage?.local?.get) {
+    return;
+  }
+
+  chrome.storage.local.get([DAT_EXT_USER_ACCOUNT_EMAIL_KEY], (result) => {
+    state.userAccountEmail = String(result[DAT_EXT_USER_ACCOUNT_EMAIL_KEY] || "").trim();
+    syncConnectEmailButton();
+    const root = document.getElementById(HEADER_TOOLS_ID);
+    if (root) {
+      syncCompactEmailOptions(root);
+    }
+    scheduleScan(true);
+  });
+}
+
+function attachUserAccountEmailListener() {
+  if (!globalThis.chrome?.storage?.onChanged) {
+    return;
+  }
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local" || !changes[DAT_EXT_USER_ACCOUNT_EMAIL_KEY]) {
+      return;
+    }
+
+    state.userAccountEmail = String(changes[DAT_EXT_USER_ACCOUNT_EMAIL_KEY].newValue || "").trim();
+    syncConnectEmailButton();
+    scheduleScan(true);
+  });
+}
+
+function syncConnectEmailButton(root = document.getElementById(HEADER_TOOLS_ID)) {
+  const btn = root?.querySelector('[data-action="connect-email"]');
+  if (!(btn instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  const email = String(state.userAccountEmail || "").trim();
+  btn.textContent = email ? `Account: ${email}` : "Connect Email";
+  btn.title = email ? `Signed in as ${email}. Click to refresh Google account.` : "Sign in with Google to use your Gmail address";
+}
+
+function requestGoogleLogin() {
+  if (!globalThis.chrome?.runtime?.sendMessage) {
+    return;
+  }
+
+  const btn = document.querySelector('[data-action="connect-email"]');
+  if (btn instanceof HTMLButtonElement) {
+    btn.disabled = true;
+    btn.setAttribute("aria-busy", "true");
+  }
+
+  chrome.runtime.sendMessage({ type: "dat-ext:google-login" }, (response) => {
+    if (btn instanceof HTMLButtonElement) {
+      btn.disabled = false;
+      btn.removeAttribute("aria-busy");
+    }
+
+    if (chrome.runtime.lastError) {
+      return;
+    }
+
+    if (response?.ok && response.email) {
+      state.userAccountEmail = String(response.email).trim();
+      syncConnectEmailButton();
+      if (!state.emailUiState.selectedEmail) {
+        persistEmailUiState({
+          ...state.emailUiState,
+          selectedEmail: state.userAccountEmail
+        });
+      }
+      scheduleScan(true);
+      return;
+    }
+
+    if (!response?.cancelled && response?.error) {
+      console.warn("[DAT Dispatcher Assist] Google login failed:", response.error);
+    }
+  });
 }
 
 function bindInputsIfNeeded() {
@@ -533,12 +623,7 @@ function bindInputsIfNeeded() {
   root.addEventListener("change", sync);
   root.querySelector('[data-action="apply"]')?.addEventListener("click", apply);
   root.querySelector('[data-action="connect-email"]')?.addEventListener("click", () => {
-    window.open("https://mail.google.com", "_blank", "noopener,noreferrer");
-    const hint = root.querySelector('[data-role="email-hint"]');
-    if (hint instanceof HTMLElement) {
-      hint.hidden = false;
-      hint.textContent = "Use Gmail as default mail handler for one-click compose.";
-    }
+    requestGoogleLogin();
   });
   root.querySelector('[data-field="email-select"]')?.addEventListener("change", () => {
     persistEmailUiState({
@@ -740,7 +825,10 @@ function buildHeaderTools(prefs) {
   const left = document.createElement("div");
   left.className = "my-ext-compact-left";
   left.append(
-    buildHeaderButton("Connect Email", "connect-email"),
+    buildHeaderButton(
+      state.userAccountEmail ? `Account: ${state.userAccountEmail}` : "Connect Email",
+      "connect-email"
+    ),
     buildHeaderSelect("email-select", "Email", state.emailUiState.selectedEmail),
     buildTemplateSelect(state.emailUiState.selectedTemplate)
   );

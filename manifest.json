@@ -8,8 +8,13 @@
     "default_popup": "popup.html"
   },
   "permissions": [
-    "storage"
+    "storage",
+    "identity"
   ],
+  "oauth2": {
+    "client_id": "YOUR_CLIENT_ID.apps.googleusercontent.com",
+    "scopes": ["https://www.googleapis.com/auth/userinfo.email"]
+  },
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -22,7 +27,8 @@
     "https://tile.openstreetmap.org/*",
     "https://maps.googleapis.com/*",
     "https://routes.googleapis.com/*",
-    "https://apis.tollguru.com/*"
+    "https://apis.tollguru.com/*",
+    "https://www.googleapis.com/*"
   ],
   "content_scripts": [
     {

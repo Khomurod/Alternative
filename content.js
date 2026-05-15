@@ -10999,7 +10999,7 @@
     const params = new URLSearchParams({ subject: String(subject ?? ""), body: String(body ?? "") });
     return `mailto:${email}?${params.toString()}`;
   }
-  function buildGmailComposeUrl(to, subject, body) {
+  function buildGmailComposeUrl(to, subject, body, options = {}) {
     const url = new URL("https://mail.google.com/mail/");
     url.searchParams.set("view", "cm");
     url.searchParams.set("fs", "1");
@@ -11009,11 +11009,17 @@
     }
     url.searchParams.set("su", String(subject ?? ""));
     url.searchParams.set("body", String(body ?? ""));
+    const sender = String(options.userAccountEmail ?? "").trim();
+    if (sender) {
+      url.searchParams.set("authuser", sender);
+    }
     return url.toString();
   }
   function pickGmailComposeOrMailto(to, subject, body, options = {}) {
     const maxLength = options.maxLength ?? GMAIL_COMPOSE_URL_MAX_LENGTH;
-    const gmail = buildGmailComposeUrl(to, subject, body);
+    const gmail = buildGmailComposeUrl(to, subject, body, {
+      userAccountEmail: options.userAccountEmail
+    });
     if (gmail.length <= maxLength) {
       return { href: gmail, usedGmail: true };
     }
@@ -11322,6 +11328,21 @@
   opacity: 0.72;
 }
 
+.sender-account {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.sender-account__label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #60708a;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 @media (max-width: 980px) {
   .actions {
     width: 100%;
@@ -11498,8 +11519,21 @@ Thank you.`;
     return String(value);
   }
   function renderColumn(card, ctx) {
-    const { data, route, loadingRoute, offerTpl, bookingTpl, templateMode, shadowHost, onRefreshRoute } = ctx;
+    const {
+      data,
+      route,
+      loadingRoute,
+      offerTpl,
+      bookingTpl,
+      templateMode,
+      shadowHost,
+      onRefreshRoute,
+      userAccountEmail = "",
+      onRequestGoogleLogin = null
+    } = ctx;
     card.replaceChildren();
+    const senderEmail = String(userAccountEmail || "").trim();
+    const gmailComposeOptions = { userAccountEmail: senderEmail };
     const roadMiles = !loadingRoute && route?.adjustedMiles !== null && route?.adjustedMiles !== void 0 && Number.isFinite(route.adjustedMiles) && route.adjustedMiles > 0 ? route.adjustedMiles : null;
     const datTripMiles = data.tripMiles !== null && data.tripMiles !== void 0 && Number.isFinite(data.tripMiles) && data.tripMiles > 0 ? data.tripMiles : null;
     const milesForRpm = roadMiles ?? datTripMiles;
@@ -11541,7 +11575,7 @@ Thank you.`;
         dataRole: "offer-gmail",
         variant: "ghost",
         onClick: () => {
-          const picked = pickGmailComposeOrMailto(data.contactEmail, offerSubject, offerBody);
+          const picked = pickGmailComposeOrMailto(data.contactEmail, offerSubject, offerBody, gmailComposeOptions);
           if (picked.usedGmail) {
             window.open(picked.href, "_blank", "noopener,noreferrer");
           } else {
@@ -11561,7 +11595,7 @@ Thank you.`;
         dataRole: "booking-gmail",
         variant: "ghost",
         onClick: () => {
-          const picked = pickGmailComposeOrMailto(data.contactEmail, bookingSubject, bookingBody);
+          const picked = pickGmailComposeOrMailto(data.contactEmail, bookingSubject, bookingBody, gmailComposeOptions);
           if (picked.usedGmail) {
             window.open(picked.href, "_blank", "noopener,noreferrer");
           } else {
@@ -11594,7 +11628,24 @@ Thank you.`;
     metricsCluster.append(rpmField, rateField, milesField, tollField);
     const top = document.createElement("div");
     top.className = "panel-header";
-    top.append(buildTextEl("span", "title", "Load Intelligence"), actions);
+    const senderAccount = document.createElement("div");
+    senderAccount.className = "sender-account";
+    if (senderEmail) {
+      const senderLabel = document.createElement("div");
+      senderLabel.className = "sender-account__label";
+      senderLabel.textContent = `Sending from: ${senderEmail}`;
+      senderAccount.appendChild(senderLabel);
+    } else {
+      senderAccount.appendChild(
+        buildActionButton("\u26A0\uFE0F Sign in to Gmail for one-click compose", {
+          variant: "ghost",
+          dataRole: "gmail-signin",
+          onClick: typeof onRequestGoogleLogin === "function" ? onRequestGoogleLogin : void 0,
+          disabled: typeof onRequestGoogleLogin !== "function"
+        })
+      );
+    }
+    top.append(buildTextEl("span", "title", "Load Intelligence"), senderAccount, actions);
     card.append(top, metricsCluster);
     if (!hasPostedRate && shadowHost) {
       const rateInput = rateField.querySelector("input");
@@ -11882,7 +11933,7 @@ Thank you.`;
     }
     return { host, shadow, card };
   }
-  function safeRender(host, card, data, route, loadingRoute, offerTpl, bookingTpl, templateMode, onRefreshRoute) {
+  function safeRender(host, card, data, route, loadingRoute, offerTpl, bookingTpl, templateMode, onRefreshRoute, renderExtras = {}) {
     if (host.__datExtMap) {
       destroyLaneMap(host.__datExtMap);
       host.__datExtMap = null;
@@ -11896,6 +11947,8 @@ Thank you.`;
       bookingTpl,
       templateMode,
       onRefreshRoute,
+      userAccountEmail: renderExtras.userAccountEmail ?? "",
+      onRequestGoogleLogin: renderExtras.onRequestGoogleLogin ?? null,
       mapInstance: null
     };
     renderColumn(card, ctx);
@@ -11909,6 +11962,10 @@ Thank you.`;
     const bookingTpl = context.emailBookingTemplate ?? "";
     const templateMode = context.emailTemplateMode ?? "default";
     const routeInspector = context.routeInspector ?? null;
+    const renderExtras = {
+      userAccountEmail: context.userAccountEmail ?? "",
+      onRequestGoogleLogin: context.onRequestGoogleLogin ?? null
+    };
     for (const host of hosts) {
       const detailHost = (
         /** @type {HTMLElement} */
@@ -11950,7 +12007,8 @@ Thank you.`;
           offerTpl,
           bookingTpl,
           templateMode,
-          refreshRoute
+          refreshRoute,
+          renderExtras
         );
         Promise.resolve(
           inspectDispatcherM3Route(
@@ -11966,7 +12024,7 @@ Thank you.`;
           }
           shadowHost.__datExtRouteData = route;
           shadowHost.dataset.loadingRoute = "false";
-          safeRender(shadowHost, card, data, route, false, offerTpl, bookingTpl, templateMode, refreshRoute);
+          safeRender(shadowHost, card, data, route, false, offerTpl, bookingTpl, templateMode, refreshRoute, renderExtras);
         }).catch((error) => {
           if (!shadowHost.isConnected || shadowHost.dataset.signature !== signature) {
             return;
@@ -11990,14 +12048,26 @@ Thank you.`;
             offerTpl,
             bookingTpl,
             templateMode,
-            refreshRoute
+            refreshRoute,
+            renderExtras
           );
         });
       };
       const refreshRoute = () => requestRoute(true);
       const routeData = shadowHost.__datExtRouteData || null;
       const isLoadingRoute = shadowHost.dataset.loadingRoute === "true";
-      safeRender(shadowHost, card, data, routeData, isLoadingRoute, offerTpl, bookingTpl, templateMode, refreshRoute);
+      safeRender(
+        shadowHost,
+        card,
+        data,
+        routeData,
+        isLoadingRoute,
+        offerTpl,
+        bookingTpl,
+        templateMode,
+        refreshRoute,
+        renderExtras
+      );
       if (!routeData && !isLoadingRoute && routeInspector) {
         requestRoute(false);
       }
@@ -12051,6 +12121,9 @@ Thank you.`;
   function defaultNumeoColumnEnabled() {
     return true;
   }
+
+  // src/google-account.js
+  var DAT_EXT_USER_ACCOUNT_EMAIL_KEY = "datExtUserAccountEmail";
 
   // src/dom-deep.js
   function walkComposedTree(start2, visitor) {
@@ -12964,7 +13037,8 @@ Thank you.`;
     emailUiState: {
       selectedEmail: "",
       selectedTemplate: "default"
-    }
+    },
+    userAccountEmail: ""
   };
   bootstrap();
   function bootstrap() {
@@ -12975,6 +13049,7 @@ Thank you.`;
     rebuildRouteInspector();
     loadNumeoColumnPreference();
     loadTollguruApiKeyFromStorage();
+    loadUserAccountEmailFromStorage();
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", start, { once: true });
       return;
@@ -12988,6 +13063,7 @@ Thank you.`;
     attachEmailTemplateListener();
     attachNumeoColumnPreferenceListener();
     attachTollguruApiKeyListener();
+    attachUserAccountEmailListener();
     attachRouteIconDirectionsListener();
     attachRowSummaryDirectionsListener();
     startObserver();
@@ -13169,7 +13245,9 @@ Thank you.`;
           emailBookingTemplate: state.emailBookingTemplate,
           emailTemplateMode: state.emailUiState.selectedTemplate,
           selectedSenderEmail: state.emailUiState.selectedEmail,
-          numeroColumnEnabled: state.numeroColumnEnabled
+          numeroColumnEnabled: state.numeroColumnEnabled,
+          userAccountEmail: state.userAccountEmail,
+          onRequestGoogleLogin: requestGoogleLogin
         });
         injectRowSummaryDirectionAnchors(document);
         injectLoadDetailDirectionAnchors(document);
@@ -13328,8 +13406,79 @@ Thank you.`;
     state.emailSelectEl = panel.querySelector('[data-field="email-select"]');
     state.templateSelectEl = panel.querySelector('[data-field="template-select"]');
     syncCompactEmailOptions(panel);
+    syncConnectEmailButton(panel);
     bindInputsIfNeeded();
     refreshApplyButtonState(panel);
+  }
+  function loadUserAccountEmailFromStorage() {
+    if (!globalThis.chrome?.storage?.local?.get) {
+      return;
+    }
+    chrome.storage.local.get([DAT_EXT_USER_ACCOUNT_EMAIL_KEY], (result) => {
+      state.userAccountEmail = String(result[DAT_EXT_USER_ACCOUNT_EMAIL_KEY] || "").trim();
+      syncConnectEmailButton();
+      const root = document.getElementById(HEADER_TOOLS_ID);
+      if (root) {
+        syncCompactEmailOptions(root);
+      }
+      scheduleScan(true);
+    });
+  }
+  function attachUserAccountEmailListener() {
+    if (!globalThis.chrome?.storage?.onChanged) {
+      return;
+    }
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== "local" || !changes[DAT_EXT_USER_ACCOUNT_EMAIL_KEY]) {
+        return;
+      }
+      state.userAccountEmail = String(changes[DAT_EXT_USER_ACCOUNT_EMAIL_KEY].newValue || "").trim();
+      syncConnectEmailButton();
+      scheduleScan(true);
+    });
+  }
+  function syncConnectEmailButton(root = document.getElementById(HEADER_TOOLS_ID)) {
+    const btn = root?.querySelector('[data-action="connect-email"]');
+    if (!(btn instanceof HTMLButtonElement)) {
+      return;
+    }
+    const email = String(state.userAccountEmail || "").trim();
+    btn.textContent = email ? `Account: ${email}` : "Connect Email";
+    btn.title = email ? `Signed in as ${email}. Click to refresh Google account.` : "Sign in with Google to use your Gmail address";
+  }
+  function requestGoogleLogin() {
+    if (!globalThis.chrome?.runtime?.sendMessage) {
+      return;
+    }
+    const btn = document.querySelector('[data-action="connect-email"]');
+    if (btn instanceof HTMLButtonElement) {
+      btn.disabled = true;
+      btn.setAttribute("aria-busy", "true");
+    }
+    chrome.runtime.sendMessage({ type: "dat-ext:google-login" }, (response) => {
+      if (btn instanceof HTMLButtonElement) {
+        btn.disabled = false;
+        btn.removeAttribute("aria-busy");
+      }
+      if (chrome.runtime.lastError) {
+        return;
+      }
+      if (response?.ok && response.email) {
+        state.userAccountEmail = String(response.email).trim();
+        syncConnectEmailButton();
+        if (!state.emailUiState.selectedEmail) {
+          persistEmailUiState({
+            ...state.emailUiState,
+            selectedEmail: state.userAccountEmail
+          });
+        }
+        scheduleScan(true);
+        return;
+      }
+      if (!response?.cancelled && response?.error) {
+        console.warn("[DAT Dispatcher Assist] Google login failed:", response.error);
+      }
+    });
   }
   function bindInputsIfNeeded() {
     const root = document.getElementById(HEADER_TOOLS_ID);
@@ -13355,12 +13504,7 @@ Thank you.`;
     root.addEventListener("change", sync);
     root.querySelector('[data-action="apply"]')?.addEventListener("click", apply);
     root.querySelector('[data-action="connect-email"]')?.addEventListener("click", () => {
-      window.open("https://mail.google.com", "_blank", "noopener,noreferrer");
-      const hint = root.querySelector('[data-role="email-hint"]');
-      if (hint instanceof HTMLElement) {
-        hint.hidden = false;
-        hint.textContent = "Use Gmail as default mail handler for one-click compose.";
-      }
+      requestGoogleLogin();
     });
     root.querySelector('[data-field="email-select"]')?.addEventListener("change", () => {
       persistEmailUiState({
@@ -13507,7 +13651,10 @@ Thank you.`;
     const left = document.createElement("div");
     left.className = "my-ext-compact-left";
     left.append(
-      buildHeaderButton("Connect Email", "connect-email"),
+      buildHeaderButton(
+        state.userAccountEmail ? `Account: ${state.userAccountEmail}` : "Connect Email",
+        "connect-email"
+      ),
       buildHeaderSelect("email-select", "Email", state.emailUiState.selectedEmail),
       buildTemplateSelect(state.emailUiState.selectedTemplate)
     );
