@@ -1,0 +1,32 @@
+[
+  {
+    "city": "Palmetto",
+    "state": "GA",
+    "lat": 33.5246,
+    "lon": -84.6683
+  },
+  {
+    "city": "Traverse City",
+    "state": "MI",
+    "lat": 44.7631,
+    "lon": -85.6206
+  },
+  {
+    "city": "Atlanta",
+    "state": "GA",
+    "lat": 33.749,
+    "lon": -84.388
+  },
+  {
+    "city": "Chicago",
+    "state": "IL",
+    "lat": 41.8781,
+    "lon": -87.6298
+  },
+  {
+    "city": "Dallas",
+    "state": "TX",
+    "lat": 32.7767,
+    "lon": -96.797
+  }
+]

@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "DAT Dispatcher Assist Tool",
+  "description": "Injects dispatcher workflow helpers into the DAT Freight & Analytics loadboard.",
+  "version": "1.4.0",
+  "action": {
+    "default_title": "DAT Dispatcher Assist Tool",
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "host_permissions": [
+    "*://*.dat.com/*",
+    "https://photon.komoot.io/*",
+    "https://router.project-osrm.org/*",
+    "https://nominatim.openstreetmap.org/*",
+    "https://tile.openstreetmap.org/*",
+    "https://maps.googleapis.com/*",
+    "https://routes.googleapis.com/*",
+    "https://apis.tollguru.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.dat.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "styles.css",
+        "leaflet-vendor.css"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "cities.json",
+        "leaflet-images/*"
+      ],
+      "matches": [
+        "*://*.dat.com/*"
+      ]
+    }
+  ]
+}

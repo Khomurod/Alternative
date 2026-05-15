@@ -1,0 +1,779 @@
+:root {
+  --dat-ext-toolbar-max-width: 420px;
+}
+
+#my-ext-compact-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin: 0 14px 6px;
+  padding: 4px 0 6px;
+  border: 0;
+  border-top: 1px solid #e4e7ec;
+  background: transparent;
+  box-sizing: border-box;
+}
+
+.my-ext-compact-left,
+.my-ext-compact-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.my-ext-compact-right {
+  justify-content: flex-end;
+}
+
+.my-ext-compact-input,
+.my-ext-compact-select {
+  height: 24px;
+  min-width: 62px;
+  padding: 0 8px;
+  border: 1px solid #d0d5dd;
+  border-radius: 4px;
+  background: #fff;
+  color: #344054;
+  font-size: 11px;
+  font-weight: 600;
+  box-sizing: border-box;
+}
+
+.my-ext-compact-input::placeholder {
+  color: #667085;
+}
+
+.my-ext-compact-input[data-field="target-rate"] {
+  width: 58px;
+}
+
+.my-ext-compact-input[data-field="target-rpm"] {
+  width: 56px;
+}
+
+.my-ext-compact-input[data-field="target-miles"] {
+  width: 60px;
+}
+
+.my-ext-compact-input[data-field="target-weight"] {
+  width: 68px;
+}
+
+.my-ext-compact-select {
+  min-width: 128px;
+}
+
+.my-ext-compact-select[data-field="email-select"] {
+  min-width: 170px;
+}
+
+.my-ext-compact-btn {
+  height: 24px;
+  border-radius: 4px;
+  padding: 0 10px;
+  border: 1px solid #0b66ff;
+  background: #0b66ff;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.my-ext-compact-btn--ghost {
+  border-color: #d0d5dd;
+  background: #fff;
+  color: #344054;
+}
+
+.my-ext-compact-btn[data-action="connect-email"] {
+  border-color: #e2c968;
+  background: #f8e7a3;
+  color: #6a5400;
+}
+
+.my-ext-compact-btn[data-action="apply"][disabled],
+.my-ext-compact-btn[data-action="apply"][aria-disabled="true"],
+.my-ext-compact-btn[disabled] {
+  border-color: #d0d5dd;
+  background: #f2f4f7;
+  color: #98a2b3;
+  cursor: not-allowed;
+}
+
+.my-ext-compact-status {
+  flex: 0 0 100%;
+  font-size: 11px;
+  color: #475467;
+  line-height: 1.3;
+}
+
+#my-ext-global-tools {
+  --my-ext-native-height: 40px;
+  --my-ext-native-radius: 8px;
+  --my-ext-native-font-size: 14px;
+  --my-ext-native-font-family: inherit;
+  display: grid;
+  gap: 10px;
+  flex: 0 1 var(--dat-ext-toolbar-max-width);
+  width: min(100%, var(--dat-ext-toolbar-max-width));
+  min-width: 280px;
+  margin: 10px 12px 10px 0;
+  padding: 12px 14px;
+  border: 1px solid #d8dee9;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
+  align-self: flex-start;
+  box-sizing: border-box;
+}
+
+/* flex: 0 0 100% + min-width 100% forces a new row when parent has flex-wrap (DAT .search-controls) */
+.search-controls.dat-ext-injected > #my-ext-global-tools {
+  flex: 0 0 100%;
+  width: 100%;
+  max-width: 100%;
+  min-width: 100%;
+  margin: 0 0 12px;
+  align-self: stretch;
+  border-radius: 10px;
+  background: #f8f9fb;
+}
+
+.my-ext-toolbar-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.my-ext-assist-summary {
+  flex: 1 1 200px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: #1d2939;
+}
+
+.my-ext-assist-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 2 1 260px;
+  justify-content: flex-end;
+}
+
+.my-ext-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid #d8e2ef;
+  border-radius: 999px;
+  background: #f8fbff;
+  color: #475467;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.my-ext-stat strong {
+  color: #111827;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.my-ext-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  flex-direction: row;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.my-ext-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  flex: 0 1 160px;
+  font-family: var(--my-ext-native-font-family);
+}
+
+.my-ext-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #475467;
+}
+
+.my-ext-input {
+  height: var(--my-ext-native-height);
+  padding: 0 12px;
+  border: 1px solid #cfd7e3;
+  border-radius: var(--my-ext-native-radius);
+  background: #ffffff;
+  color: #111827;
+  font-size: var(--my-ext-native-font-size);
+  font-family: var(--my-ext-native-font-family);
+  outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+  box-sizing: border-box;
+}
+
+.my-ext-input:focus {
+  border-color: #0b66ff;
+  box-shadow: 0 0 0 3px rgba(11, 102, 255, 0.12);
+}
+
+.my-ext-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--my-ext-native-height);
+  padding: 0 12px;
+  border: 1px solid #cfd7e3;
+  border-radius: var(--my-ext-native-radius);
+  background: #ffffff;
+  color: #344054;
+  font-size: 13px;
+  font-family: var(--my-ext-native-font-family);
+  font-weight: 700;
+  white-space: nowrap;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+}
+
+.my-ext-toggle__input {
+  margin: 0;
+}
+
+:root[data-dat-ext-toolbar-mode="compact"] #my-ext-global-tools {
+  padding: 10px 12px;
+}
+
+:root[data-dat-ext-toolbar-mode="compact"] .my-ext-toolbar-row {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+:root[data-dat-ext-summary-density="compact"] .my-ext-assist-stats {
+  gap: 4px;
+}
+
+:root[data-dat-ext-summary-density="compact"] .my-ext-stat {
+  padding: 4px 8px;
+  font-size: 10px;
+}
+
+.my-ext-detail-row {
+  width: 100%;
+}
+
+.my-ext-detail-column {
+  width: 100%;
+}
+
+.my-ext-panel__mile-mode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.my-ext-mile-select {
+  flex: 1 1 200px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.dat-ext-col__map-wrap {
+  margin-bottom: 14px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid #dbe4ee;
+  background: #eef2f6;
+}
+
+.dat-ext-col__static-map-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+  object-fit: cover;
+}
+
+.dat-ext-col__map {
+  height: 200px;
+  width: 100%;
+}
+
+.dat-ext-col__map-foot {
+  margin: 10px 0 0;
+  font-size: 10px;
+  line-height: 1.45;
+  color: #667085;
+}
+
+.my-ext-note--inline {
+  margin: 0;
+}
+
+.my-ext-numeo-column {
+  box-sizing: border-box;
+}
+
+.my-ext-panel {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 18px;
+  border: 1px solid #dbe4ef;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.06);
+  color: #101828;
+}
+
+.my-ext-panel.my-ext-panel--reference {
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: none;
+  border-color: #e4e7ec;
+  background: #ffffff;
+}
+
+.dat-ext-ref__header {
+  margin-bottom: 6px;
+}
+
+.dat-ext-ref__title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #667085;
+  letter-spacing: 0.02em;
+}
+
+.dat-ext-ref__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.dat-ext-ref__actions .my-ext-btn {
+  min-height: 26px;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  box-shadow: none;
+}
+
+.dat-ext-ref__top-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.dat-ext-ref__metric-field {
+  display: grid;
+  gap: 3px;
+}
+
+.dat-ext-ref__metric-label {
+  font-size: 10px;
+  color: #475467;
+  font-weight: 700;
+}
+
+.dat-ext-ref__metric-input {
+  height: 26px;
+  border: 1px solid #d0d5dd;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #101828;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0 6px;
+  box-sizing: border-box;
+}
+
+.dat-ext-ref__tolls-btn {
+  min-height: 26px;
+  border-radius: 4px;
+  padding: 0 8px;
+  font-size: 11px;
+  box-shadow: none;
+}
+
+.dat-ext-ref__bottom-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.dat-ext-ref__bottom-grid .my-ext-metric {
+  gap: 2px;
+  padding: 8px;
+  border-radius: 6px;
+}
+
+.dat-ext-ref__bottom-grid .my-ext-metric .my-ext-label {
+  font-size: 10px;
+}
+
+.dat-ext-ref__bottom-grid .my-ext-metric strong {
+  font-size: 12px;
+}
+
+.dat-ext-ref__route-meta {
+  margin: 8px 0 0;
+  font-size: 10px;
+  color: #667085;
+  line-height: 1.35;
+}
+
+.dat-ext-ref__map-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f2f4f7;
+}
+
+.dat-ext-ref__map-placeholder-text {
+  font-size: 12px;
+  color: #667085;
+}
+
+.my-ext-panel__header {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.my-ext-panel__header-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: start;
+}
+
+.my-ext-panel__heading {
+  display: grid;
+  gap: 4px;
+}
+
+.my-ext-panel__eyebrow {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #0b66ff;
+}
+
+.my-ext-panel__title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #101828;
+}
+
+.my-ext-panel__subtitle {
+  font-size: 13px;
+  color: #475467;
+}
+
+.my-ext-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.my-ext-badge--pass {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #166534;
+}
+
+.my-ext-badge--partial {
+  background: #fef3c7;
+  border-color: #fcd34d;
+  color: #92400e;
+}
+
+.my-ext-badge--negotiate {
+  background: #ede9fe;
+  border-color: #c4b5fd;
+  color: #6d28d9;
+}
+
+.my-ext-badge--fail {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
+.my-ext-badge--neutral,
+.my-ext-badge--unavailable {
+  background: #eef2f6;
+  border-color: #d5dde7;
+  color: #475467;
+}
+
+.my-ext-badge--route,
+.my-ext-badge--exact,
+.my-ext-badge--estimated {
+  width: fit-content;
+}
+
+.my-ext-badge--exact {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.my-ext-badge--estimated {
+  background: #fff7ed;
+  border-color: #fdba74;
+  color: #c2410c;
+}
+
+.my-ext-panel__route {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.my-ext-pill,
+.my-ext-metric {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid #dbe4ee;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.my-ext-pill strong,
+.my-ext-metric strong {
+  font-size: 15px;
+  line-height: 1.35;
+  color: #0f172a;
+}
+
+.my-ext-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.my-ext-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.my-ext-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+  box-sizing: border-box;
+}
+
+.my-ext-btn:hover {
+  transform: translateY(-1px);
+}
+
+.my-ext-btn--primary {
+  background: #0b66ff;
+  border-color: #0b66ff;
+  color: #ffffff;
+  box-shadow: 0 10px 20px rgba(11, 102, 255, 0.2);
+}
+
+.my-ext-btn--secondary,
+.my-ext-btn--ghost {
+  background: #ffffff;
+  border-color: #cfd7e3;
+  color: #0f172a;
+}
+
+.my-ext-btn--disabled,
+.my-ext-btn[aria-disabled="true"],
+.my-ext-btn:disabled {
+  background: #eaecf0;
+  border-color: #d0d5dd;
+  color: #98a2b3;
+  cursor: not-allowed;
+  pointer-events: none;
+  box-shadow: none;
+  transform: none;
+}
+
+.my-ext-note {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff8e1;
+  color: #7a5b00;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+tr.dat-ext-grid-row,
+.row-container.dat-ext-grid-row,
+[role="row"].dat-ext-grid-row {
+  transition: box-shadow 120ms ease, background-color 120ms ease, opacity 120ms ease;
+}
+
+tr.dat-ext-grid-row--pass,
+.row-container.dat-ext-grid-row--pass,
+[role="row"].dat-ext-grid-row--pass {
+  box-shadow: inset 3px 0 0 0 #15803d;
+}
+
+tr.dat-ext-grid-row--fail,
+.row-container.dat-ext-grid-row--fail,
+[role="row"].dat-ext-grid-row--fail {
+  box-shadow: inset 3px 0 0 0 #b91c1c;
+}
+
+tr.dat-ext-grid-row--partial,
+.row-container.dat-ext-grid-row--partial,
+[role="row"].dat-ext-grid-row--partial {
+  box-shadow: inset 3px 0 0 0 #ca8a04;
+}
+
+tr.dat-ext-grid-row--negotiate,
+.row-container.dat-ext-grid-row--negotiate,
+[role="row"].dat-ext-grid-row--negotiate {
+  box-shadow: inset 3px 0 0 0 #7c3aed;
+}
+
+tr.dat-ext-grid-row--broker-risk,
+.row-container.dat-ext-grid-row--broker-risk,
+[role="row"].dat-ext-grid-row--broker-risk {
+  background-color: rgba(248, 113, 113, 0.05);
+}
+
+tr.dat-ext-grid-row--broker-strong,
+.row-container.dat-ext-grid-row--broker-strong,
+[role="row"].dat-ext-grid-row--broker-strong {
+  background-color: rgba(34, 197, 94, 0.05);
+}
+
+tr.dat-ext-grid-row--hidden,
+.row-container.dat-ext-grid-row--hidden,
+[role="row"].dat-ext-grid-row--hidden {
+  display: none !important;
+}
+
+@media (max-width: 1200px) {
+  .my-ext-panel__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  #my-ext-compact-tools {
+    margin: 0 10px 8px;
+    padding: 8px;
+  }
+
+  .my-ext-compact-left,
+  .my-ext-compact-right {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .my-ext-compact-select {
+    min-width: 110px;
+  }
+
+  #my-ext-global-tools {
+    width: calc(100% - 12px);
+    margin-right: 0;
+  }
+
+  .my-ext-toolbar-row,
+  .my-ext-panel__route,
+  .my-ext-panel__grid,
+  .dat-ext-ref__top-metrics,
+  .dat-ext-ref__bottom-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .my-ext-panel {
+    padding: 14px;
+  }
+
+  .my-ext-panel__header-row {
+    flex-direction: column;
+  }
+
+  .my-ext-btn {
+    width: 100%;
+  }
+}
+
+/* Row summary: Google directions control (injected next to trip miles, DAT virtual scroll) */
+.dat-ext-row-dir-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 0 4px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: #1c60f2;
+  cursor: pointer;
+  vertical-align: middle;
+  line-height: 0;
+}
+
+.dat-ext-row-dir-btn:hover {
+  background: rgba(28, 96, 242, 0.1);
+}
+
+.dat-ext-row-dir-btn:focus-visible {
+  outline: 2px solid #1c60f2;
+  outline-offset: 1px;
+}
+
+.dat-ext-row-dir-btn svg {
+  display: block;
+}
+
+.my-ext-email-hint {
+  flex: 0 0 100%;
+  font-size: 11px;
+  color: #475467;
+  line-height: 1.35;
+  padding: 2px 0 0;
+}

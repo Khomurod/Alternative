@@ -1,0 +1,21 @@
+{
+  "name": "dat-dispatcher-assist",
+  "private": true,
+  "version": "1.4.0",
+  "type": "module",
+  "scripts": {
+    "split:dat-ui": "node scripts/split-message-txt.mjs",
+    "build": "esbuild src/content-entry.js --bundle --outfile=content.js --platform=browser --target=chrome114 --legal-comments=none && esbuild src/popup-entry.js --bundle --outfile=popup.js --platform=browser --target=chrome114 --legal-comments=none",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:tollguru": "node scripts/test-tollguru.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2",
+    "jsdom": "^26.0.0",
+    "vitest": "^3.0.5"
+  },
+  "dependencies": {
+    "leaflet": "^1.9.4"
+  }
+}

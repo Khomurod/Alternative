@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>DAT Dispatcher Assist</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        width: 380px;
+        margin: 0;
+        padding: 14px;
+        font-size: 13px;
+        color: #101828;
+      }
+      h1 {
+        font-size: 15px;
+        margin: 0 0 8px;
+      }
+      p.hint {
+        margin: 0 0 12px;
+        color: #475467;
+        line-height: 1.45;
+      }
+      code {
+        font-size: 11px;
+        background: #f2f4f7;
+        padding: 1px 4px;
+        border-radius: 4px;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin: 10px 0 4px;
+      }
+      textarea {
+        width: 100%;
+        min-height: 88px;
+        box-sizing: border-box;
+        padding: 8px;
+        border: 1px solid #d0d5dd;
+        border-radius: 8px;
+        font: inherit;
+        resize: vertical;
+      }
+      button {
+        margin-top: 12px;
+        padding: 8px 14px;
+        font-weight: 600;
+        border-radius: 8px;
+        border: 1px solid #0b66ff;
+        background: #0b66ff;
+        color: #fff;
+        cursor: pointer;
+      }
+      button:hover {
+        filter: brightness(1.05);
+      }
+      #msg {
+        margin-top: 8px;
+        min-height: 18px;
+        font-size: 12px;
+        color: #15803d;
+      }
+      .feature-block {
+        margin-top: 16px;
+        padding-top: 12px;
+        border-top: 1px solid #eaecf0;
+      }
+      .feature-block .row {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        font-weight: 500;
+        margin: 0;
+        cursor: pointer;
+      }
+      .feature-block .row input {
+        margin-top: 3px;
+      }
+      .hint.small {
+        margin: 8px 0 0 28px;
+        font-size: 12px;
+      }
+      input[type="password"] {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px;
+        border: 1px solid #d0d5dd;
+        border-radius: 8px;
+        font: inherit;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>DAT Dispatcher Assist</h1>
+    <p class="hint">
+      Optional email bodies for the load detail buttons. Leave blank to use built-in text. Placeholders:
+      <code>{{company}}</code>, <code>{{origin}}</code>, <code>{{destination}}</code>, <code>{{email}}</code>
+    </p>
+    <label for="offer-tpl">Offer email body</label>
+    <textarea id="offer-tpl" spellcheck="true" aria-label="Offer email body template"></textarea>
+    <label for="booking-tpl">Booking email body</label>
+    <textarea id="booking-tpl" spellcheck="true" aria-label="Booking email body template"></textarea>
+    <button id="save" type="button">Save templates</button>
+    <div class="feature-block">
+      <label class="row">
+        <input type="checkbox" id="numeo-column" />
+        <span>Load assist column (between Trip and Rate when DAT layout allows; includes route map and toll estimate tools)</span>
+      </label>
+      <p class="hint small">Enabled by default. Uncheck and save to turn it off. Reload DAT tabs after toggling.</p>
+    </div>
+    <div class="feature-block">
+      <label for="tollguru-key">TollGuru API key (optional)</label>
+      <input
+        id="tollguru-key"
+        type="password"
+        autocomplete="off"
+        spellcheck="false"
+        aria-label="TollGuru API key"
+        placeholder="tg_…"
+      />
+      <p class="hint small">
+        Stored only in this browser for truck toll estimates on routes. Not sent to DAT. Reload DAT tabs after saving.
+      </p>
+    </div>
+    <div id="msg" aria-live="polite"></div>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
