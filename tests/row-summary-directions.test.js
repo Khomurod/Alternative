@@ -40,7 +40,7 @@ describe("row summary directions anchors", () => {
     expect(buttons.length).toBe(2);
   });
 
-  it("wraps trip-miles and button in a flex container", () => {
+  it("prepends button with flex layout on miles parent", () => {
     document.body.innerHTML = `
       <cdk-virtual-scroll-viewport id="table-viewport">
         <div class="cdk-virtual-scroll-content-wrapper">
@@ -59,11 +59,9 @@ describe("row summary directions anchors", () => {
     const miles = document.querySelector(".trip-miles");
     const btn = document.querySelector(`[${ROW_DIR_ATTR}]`);
     expect(btn).toBeTruthy();
-    const wrap = miles?.parentElement;
-    expect(wrap?.getAttribute("data-dat-ext-trip-miles-wrap")).toBe("1");
-    expect(wrap?.style.display).toBe("flex");
-    expect(wrap?.style.alignItems).toBe("center");
-    expect(wrap?.style.gap).toBe("4px");
+    const parent = miles?.parentElement;
+    expect(parent?.style.display).toBe("flex");
+    expect(parent?.style.alignItems).toBe("center");
     expect(miles?.previousElementSibling).toBe(btn);
     expect(btn?.getAttribute(ROW_DIR_CONTEXT_ATTR)).toBe("list");
   });

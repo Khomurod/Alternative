@@ -2,9 +2,8 @@ import { findDatOneViewport } from "./dat-one-virtual.js";
 
 const ROW_DIR_ATTR = "data-dat-ext-row-dir";
 export const ROW_DIR_CONTEXT_ATTR = "data-dat-ext-row-dir-context";
-const TRIP_WRAP_ATTR = "data-dat-ext-trip-miles-wrap";
 
-const DIR_BTN_SVG = `<svg width="18" height="18" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+const DIR_BTN_SVG = `<svg width="18" height="18" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
   <path d="M24 4C15.7157 4 9 10.7157 9 19C9 30.5 24 44 24 44C24 44 39 30.5 39 19C39 10.7157 32.2843 4 24 4Z" fill="#34A853"/>
   <path d="M24 12C20.134 12 17 15.134 17 19C17 22.866 20.134 26 24 26C27.866 26 31 22.866 31 19C31 15.134 27.866 12 24 12Z" fill="#FBBC05"/>
   <path d="M24 4C21.465 4 19.074 4.646 16.914 5.776L24 19L31.086 5.776C28.926 4.646 26.535 4 24 4Z" fill="#EA4335"/>
@@ -37,36 +36,17 @@ function createDirectionButton(doc, context) {
 }
 
 /**
- * Wrap trip miles and directions button in a flex row (idempotent; avoids observer loops).
- *
- * @param {Document} doc
  * @param {HTMLElement} miles
- * @param {"list" | "detail"} context
+ * @param {HTMLButtonElement} btn
  */
-function wrapTripMilesWithDirectionButton(doc, miles, context) {
-  const existingWrap = miles.closest(`[${TRIP_WRAP_ATTR}]`);
-  if (existingWrap instanceof HTMLElement) {
-    if (!existingWrap.querySelector(`[${ROW_DIR_ATTR}]`)) {
-      existingWrap.insertBefore(createDirectionButton(doc, context), miles);
-    }
-    return;
-  }
-
+function applyTripMilesParentFlex(miles, btn) {
   const insertParent = miles.parentElement;
   if (!(insertParent instanceof HTMLElement)) {
     return;
   }
-
-  const wrap = doc.createElement("div");
-  wrap.className = "dat-ext-trip-miles-wrap";
-  wrap.setAttribute(TRIP_WRAP_ATTR, "1");
-  wrap.style.display = "flex";
-  wrap.style.alignItems = "center";
-  wrap.style.gap = "4px";
-
-  const btn = createDirectionButton(doc, context);
-  insertParent.insertBefore(wrap, miles);
-  wrap.append(btn, miles);
+  insertParent.style.display = "flex";
+  insertParent.style.alignItems = "center";
+  insertParent.insertBefore(btn, miles);
 }
 
 /**
@@ -102,7 +82,8 @@ export function injectRowSummaryDirectionAnchors(doc) {
       continue;
     }
 
-    wrapTripMilesWithDirectionButton(doc, miles, "list");
+    const btn = createDirectionButton(doc, "list");
+    applyTripMilesParentFlex(miles, btn);
   }
 }
 
@@ -129,7 +110,8 @@ export function injectLoadDetailDirectionAnchors(doc) {
       continue;
     }
 
-    wrapTripMilesWithDirectionButton(doc, miles, "detail");
+    const btn = createDirectionButton(doc, "detail");
+    applyTripMilesParentFlex(miles, btn);
   }
 }
 
