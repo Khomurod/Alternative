@@ -9851,13 +9851,8 @@
   // src/tollguru-api-key.js
   var DAT_EXT_TOLLGURU_API_KEY = "datExtTollguruApiKey";
   var DEFAULT_TOLLGURU_VEHICLE_TYPE = "5AxlesTruck";
-  var HARDCODED_TOLLGURU_API_KEY = "tg_B0FB9D6C300342C688D755047EA0D917";
   function getEffectiveTollGuruApiKey(storedFromChrome) {
-    const stored = String(storedFromChrome ?? "").trim();
-    if (stored) {
-      return stored;
-    }
-    return String(HARDCODED_TOLLGURU_API_KEY ?? "").trim();
+    return String(storedFromChrome ?? "").trim();
   }
 
   // src/tollguru-tolls.js
@@ -11308,6 +11303,15 @@
   text-overflow: ellipsis;
 }
 
+.metric-toll-key-warning {
+  font-size: 0.78em;
+  font-weight: 600;
+  color: #b54708;
+  line-height: 1.25;
+  margin-top: 4px;
+  white-space: normal;
+}
+
 .metric-label {
   font-size: 0.85em;
   font-weight: 700;
@@ -11480,7 +11484,7 @@
     field.append(labelEl, input);
     return field;
   }
-  function buildTollMetricDisplayField(label, mainValue, subtitle, dataRole) {
+  function buildTollMetricDisplayField(label, mainValue, subtitle, dataRole, options = {}) {
     const field = document.createElement("div");
     field.className = "metric metric--toll";
     const labelEl = buildTextEl("span", "metric-label", label);
@@ -11489,6 +11493,15 @@
     const sub = buildTextEl("div", "metric-toll-source", subtitle);
     sub.dataset.role = "toll-source";
     field.append(labelEl, val, sub);
+    if (options.showTollguruKeyWarning) {
+      const warn = buildTextEl(
+        "div",
+        "metric-toll-key-warning",
+        "\u26A0\uFE0F Add TollGuru Key in Extension Options."
+      );
+      warn.dataset.role = "tollguru-key-warning";
+      field.append(warn);
+    }
     return field;
   }
   function buildMailto(email, subject, body) {
@@ -11587,7 +11600,8 @@ Thank you.`;
       shadowHost,
       onRefreshRoute,
       userAccountEmail = "",
-      onRequestGoogleLogin = null
+      onRequestGoogleLogin = null,
+      tollguruApiKey = ""
     } = ctx;
     card.replaceChildren();
     const senderEmail = String(userAccountEmail || "").trim();
@@ -11675,11 +11689,13 @@ Thank you.`;
     const rateDisplay = hasPostedRate ? formatMoney(data.rateDollars) : formatUserRateInputValue(shadowHost?.__datExtUserRate);
     const rateField = buildMetricField("RATE $", rateDisplay, "rate", { readOnly: hasPostedRate });
     const milesField = buildMetricField("MILES", formatOptionalMiles(milesForRpm, loadingRoute), "miles");
+    const showTollguruKeyWarning = !String(tollguruApiKey || "").trim();
     const tollField = buildTollMetricDisplayField(
       "TOLL EST",
       tollMainLineDisplay(route?.tollStatus, route?.tollSource, loadingRoute),
       formatTollSourceSubtitle(route, loadingRoute),
-      "toll"
+      "toll",
+      { showTollguruKeyWarning }
     );
     const metricsCluster = document.createElement("div");
     metricsCluster.className = "metrics-row";
@@ -12011,6 +12027,7 @@ Thank you.`;
       onRefreshRoute,
       userAccountEmail: renderExtras.userAccountEmail ?? "",
       onRequestGoogleLogin: renderExtras.onRequestGoogleLogin ?? null,
+      tollguruApiKey: renderExtras.tollguruApiKey ?? "",
       mapInstance: null
     };
     renderColumn(card, ctx);
@@ -12026,7 +12043,8 @@ Thank you.`;
     const routeInspector = context.routeInspector ?? null;
     const renderExtras = {
       userAccountEmail: context.userAccountEmail ?? "",
-      onRequestGoogleLogin: context.onRequestGoogleLogin ?? null
+      onRequestGoogleLogin: context.onRequestGoogleLogin ?? null,
+      tollguruApiKey: context.tollguruApiKey ?? ""
     };
     for (const host of hosts) {
       const detailHost = (
@@ -12156,7 +12174,8 @@ Thank you.`;
     const search = sanitizeLocationText(searchOrigin || "");
     const originPoint = sanitizeLocationText(pickup || "");
     const destPoint = sanitizeLocationText(delivery || "");
-    const url = new URL("https://www.google.com/maps/dir/?api=1");
+    const url = new URL("https://www.google.com/maps/dir/");
+    url.searchParams.set("api", "1");
     url.searchParams.set("travelmode", "driving");
     if (search && search.toLowerCase() !== originPoint.toLowerCase()) {
       url.searchParams.set("origin", search);
@@ -12987,6 +13006,7 @@ Thank you.`;
   // src/row-summary-directions.js
   var ROW_DIR_ATTR = "data-dat-ext-row-dir";
   var ROW_DIR_CONTEXT_ATTR = "data-dat-ext-row-dir-context";
+  var TRIP_WRAP_ATTR = "data-dat-ext-trip-miles-wrap";
   var DIR_BTN_SVG = `<svg width="18" height="18" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
   <path d="M24 4C15.7157 4 9 10.7157 9 19C9 30.5 24 44 24 44C24 44 39 30.5 39 19C39 10.7157 32.2843 4 24 4Z" fill="#34A853"/>
   <path d="M24 12C20.134 12 17 15.134 17 19C17 22.866 20.134 26 24 26C27.866 26 31 22.866 31 19C31 15.134 27.866 12 24 12Z" fill="#FBBC05"/>
@@ -12995,11 +13015,6 @@ Thank you.`;
 </svg>`;
   function findTripCell(row) {
     return row.querySelector('[data-test="load-trip-cell"]') ?? row.querySelector(".cell-trip");
-  }
-  function applyTripMilesFlexLayout(insertParent) {
-    insertParent.style.display = "flex";
-    insertParent.style.alignItems = "center";
-    insertParent.style.gap = "6px";
   }
   function createDirectionButton(doc, context) {
     const btn = doc.createElement("button");
@@ -13011,6 +13026,28 @@ Thank you.`;
     btn.setAttribute("aria-label", "Open Google Maps directions");
     btn.innerHTML = DIR_BTN_SVG;
     return btn;
+  }
+  function wrapTripMilesWithDirectionButton(doc, miles, context) {
+    const existingWrap = miles.closest(`[${TRIP_WRAP_ATTR}]`);
+    if (existingWrap instanceof HTMLElement) {
+      if (!existingWrap.querySelector(`[${ROW_DIR_ATTR}]`)) {
+        existingWrap.insertBefore(createDirectionButton(doc, context), miles);
+      }
+      return;
+    }
+    const insertParent = miles.parentElement;
+    if (!(insertParent instanceof HTMLElement)) {
+      return;
+    }
+    const wrap = doc.createElement("div");
+    wrap.className = "dat-ext-trip-miles-wrap";
+    wrap.setAttribute(TRIP_WRAP_ATTR, "1");
+    wrap.style.display = "flex";
+    wrap.style.alignItems = "center";
+    wrap.style.gap = "4px";
+    const btn = createDirectionButton(doc, context);
+    insertParent.insertBefore(wrap, miles);
+    wrap.append(btn, miles);
   }
   function injectRowSummaryDirectionAnchors(doc) {
     const viewport = findDatOneViewport(doc);
@@ -13033,13 +13070,7 @@ Thank you.`;
       if (!(miles instanceof HTMLElement)) {
         continue;
       }
-      const insertParent = miles.parentElement;
-      if (!(insertParent instanceof HTMLElement)) {
-        continue;
-      }
-      applyTripMilesFlexLayout(insertParent);
-      const btn = createDirectionButton(doc, "list");
-      insertParent.insertBefore(btn, miles);
+      wrapTripMilesWithDirectionButton(doc, miles, "list");
     }
   }
   function injectLoadDetailDirectionAnchors(doc) {
@@ -13054,13 +13085,7 @@ Thank you.`;
       if (!(miles instanceof HTMLElement)) {
         continue;
       }
-      const insertParent = miles.parentElement;
-      if (!(insertParent instanceof HTMLElement)) {
-        continue;
-      }
-      applyTripMilesFlexLayout(insertParent);
-      const btn = createDirectionButton(doc, "detail");
-      insertParent.insertBefore(btn, miles);
+      wrapTripMilesWithDirectionButton(doc, miles, "detail");
     }
   }
 
@@ -13317,7 +13342,8 @@ Thank you.`;
           selectedSenderEmail: state.emailUiState.selectedEmail,
           numeroColumnEnabled: state.numeroColumnEnabled,
           userAccountEmail: state.userAccountEmail,
-          onRequestGoogleLogin: requestGoogleLogin
+          onRequestGoogleLogin: requestGoogleLogin,
+          tollguruApiKey: state.tollguruApiKey
         });
         injectRowSummaryDirectionAnchors(document);
         injectLoadDetailDirectionAnchors(document);

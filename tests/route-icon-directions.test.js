@@ -27,7 +27,8 @@ describe("route icon helpers", () => {
 
   it("uses direct pickup-to-delivery route when search origin is empty", () => {
     const url = new URL(buildGoogleDirectionsUrl("", "Tucker, GA", "Cincinnati, OH"));
-    expect(url.href).toContain("https://www.google.com/maps/dir/?api=1");
+    expect(url.href.startsWith("https://www.google.com/maps/dir/")).toBe(true);
+    expect(url.href).not.toContain("googleusercontent.com");
     expect(url.searchParams.get("origin")).toBe("Tucker, GA");
     expect(url.searchParams.get("destination")).toBe("Cincinnati, OH");
     expect(url.searchParams.get("waypoints")).toBeNull();

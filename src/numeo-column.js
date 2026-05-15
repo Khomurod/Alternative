@@ -329,6 +329,15 @@ function buildColumnStyles(typography, gridCell) {
   text-overflow: ellipsis;
 }
 
+.metric-toll-key-warning {
+  font-size: 0.78em;
+  font-weight: 600;
+  color: #b54708;
+  line-height: 1.25;
+  margin-top: 4px;
+  white-space: normal;
+}
+
 .metric-label {
   font-size: 0.85em;
   font-weight: 700;
@@ -517,7 +526,7 @@ function buildMetricField(label, value, dataRole, options = {}) {
   return field;
 }
 
-function buildTollMetricDisplayField(label, mainValue, subtitle, dataRole) {
+function buildTollMetricDisplayField(label, mainValue, subtitle, dataRole, options = {}) {
   const field = document.createElement("div");
   field.className = "metric metric--toll";
   const labelEl = buildTextEl("span", "metric-label", label);
@@ -526,6 +535,15 @@ function buildTollMetricDisplayField(label, mainValue, subtitle, dataRole) {
   const sub = buildTextEl("div", "metric-toll-source", subtitle);
   sub.dataset.role = "toll-source";
   field.append(labelEl, val, sub);
+  if (options.showTollguruKeyWarning) {
+    const warn = buildTextEl(
+      "div",
+      "metric-toll-key-warning",
+      "⚠️ Add TollGuru Key in Extension Options."
+    );
+    warn.dataset.role = "tollguru-key-warning";
+    field.append(warn);
+  }
   return field;
 }
 
@@ -642,7 +660,8 @@ export function renderColumn(card, ctx) {
     shadowHost,
     onRefreshRoute,
     userAccountEmail = "",
-    onRequestGoogleLogin = null
+    onRequestGoogleLogin = null,
+    tollguruApiKey = ""
   } = ctx;
   card.replaceChildren();
 
@@ -747,11 +766,13 @@ export function renderColumn(card, ctx) {
   const rateDisplay = hasPostedRate ? formatMoney(data.rateDollars) : formatUserRateInputValue(shadowHost?.__datExtUserRate);
   const rateField = buildMetricField("RATE $", rateDisplay, "rate", { readOnly: hasPostedRate });
   const milesField = buildMetricField("MILES", formatOptionalMiles(milesForRpm, loadingRoute), "miles");
+  const showTollguruKeyWarning = !String(tollguruApiKey || "").trim();
   const tollField = buildTollMetricDisplayField(
     "TOLL EST",
     tollMainLineDisplay(route?.tollStatus, route?.tollSource, loadingRoute),
     formatTollSourceSubtitle(route, loadingRoute),
-    "toll"
+    "toll",
+    { showTollguruKeyWarning }
   );
 
   const metricsCluster = document.createElement("div");

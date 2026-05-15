@@ -323,6 +323,7 @@ function safeRender(host, card, data, route, loadingRoute, offerTpl, bookingTpl,
     onRefreshRoute,
     userAccountEmail: renderExtras.userAccountEmail ?? "",
     onRequestGoogleLogin: renderExtras.onRequestGoogleLogin ?? null,
+    tollguruApiKey: renderExtras.tollguruApiKey ?? "",
     mapInstance: null
   };
   renderColumn(card, ctx);
@@ -339,7 +340,8 @@ export function enhanceLoadDetails(doc, context) {
   const routeInspector = context.routeInspector ?? null;
   const renderExtras = {
     userAccountEmail: context.userAccountEmail ?? "",
-    onRequestGoogleLogin: context.onRequestGoogleLogin ?? null
+    onRequestGoogleLogin: context.onRequestGoogleLogin ?? null,
+    tollguruApiKey: context.tollguruApiKey ?? ""
   };
 
   for (const host of hosts) {

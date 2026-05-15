@@ -318,7 +318,8 @@ function scheduleScan(immediate) {
         selectedSenderEmail: state.emailUiState.selectedEmail,
         numeroColumnEnabled: state.numeroColumnEnabled,
         userAccountEmail: state.userAccountEmail,
-        onRequestGoogleLogin: requestGoogleLogin
+        onRequestGoogleLogin: requestGoogleLogin,
+        tollguruApiKey: state.tollguruApiKey
       });
 
       injectRowSummaryDirectionAnchors(document);

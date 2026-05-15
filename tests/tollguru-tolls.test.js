@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import { getEffectiveTollGuruApiKey, HARDCODED_TOLLGURU_API_KEY } from "../src/tollguru-api-key.js";
+import { getEffectiveTollGuruApiKey } from "../src/tollguru-api-key.js";
 import {
   fetchTollGuruLaneTolls,
   fetchTollGuruTollStatus,
@@ -19,9 +19,9 @@ describe("getEffectiveTollGuruApiKey", () => {
     expect(getEffectiveTollGuruApiKey("  from-storage  ")).toBe("from-storage");
   });
 
-  it("falls back to HARDCODED_TOLLGURU_API_KEY when storage is empty", () => {
-    expect(getEffectiveTollGuruApiKey("")).toBe(String(HARDCODED_TOLLGURU_API_KEY ?? "").trim());
-    expect(getEffectiveTollGuruApiKey(null)).toBe(String(HARDCODED_TOLLGURU_API_KEY ?? "").trim());
+  it("returns empty string when storage is empty", () => {
+    expect(getEffectiveTollGuruApiKey("")).toBe("");
+    expect(getEffectiveTollGuruApiKey(null)).toBe("");
   });
 });
 

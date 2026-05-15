@@ -176,6 +176,32 @@ describe("createColumnDOM", () => {
     expect(card.querySelector(".actions")).toBeTruthy();
   });
 
+  it("shows TollGuru key warning when tollguruApiKey is empty", () => {
+    const { card } = createColumnDOM(document, { gridCell: true });
+    renderColumn(card, {
+      data: {
+        origin: "A",
+        destination: "B",
+        tripMiles: 100,
+        rateDollars: 500,
+        rpmHint: 5,
+        companyName: "Co",
+        contactEmail: "a@b.com"
+      },
+      route: { tollStatus: "USD 12 est", tollSource: "google" },
+      loadingRoute: false,
+      offerTpl: "",
+      bookingTpl: "",
+      templateMode: "default",
+      shadowHost: null,
+      onRefreshRoute: null,
+      tollguruApiKey: "",
+      mapInstance: null
+    });
+    expect(card.textContent).toContain("Add TollGuru Key in Extension Options");
+    expect(card.querySelector('[data-role="tollguru-key-warning"]')).toBeTruthy();
+  });
+
   it("shows Sending from label when userAccountEmail is set", () => {
     const { card } = createColumnDOM(document, { gridCell: true });
     renderColumn(card, {
