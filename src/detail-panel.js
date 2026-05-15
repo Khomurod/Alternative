@@ -33,6 +33,9 @@ export function readSearchOriginText(doc) {
   }
   const root = doc.body || doc;
   const selectors = [
+    'dat-search-location[data-test="origin-input"] input',
+    '[data-test="origin-input"] input',
+    'input[aria-label*="Origin"]',
     "#origin-automation input",
     "input#origin-automation",
     "dat-search-location#origin-automation input",

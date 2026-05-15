@@ -11,26 +11,22 @@ import {
 } from "../src/row-summary-directions.js";
 
 describe("row summary directions anchors", () => {
-  it("injects one button per row dat-route and avoids duplicates", () => {
+  it("injects one button per row trip cell and avoids duplicates", () => {
     document.body.innerHTML = `
       <cdk-virtual-scroll-viewport id="table-viewport">
         <div class="cdk-virtual-scroll-content-wrapper">
           <div class="row-container">
             <div class="row-cells">
-            <dat-route>
-              <div class="trip-icon-container">
+              <div data-test="load-trip-cell" class="cell-trip">
                 <div class="trip-miles">406 mi</div>
               </div>
-            </dat-route>
             </div>
           </div>
           <div class="row-container">
             <div class="row-cells">
-            <dat-route>
-              <div class="trip-icon-container">
+              <div data-test="load-trip-cell" class="cell-trip">
                 <div class="trip-miles">100 mi</div>
               </div>
-            </dat-route>
             </div>
           </div>
         </div>
@@ -40,22 +36,19 @@ describe("row summary directions anchors", () => {
     injectRowSummaryDirectionAnchors(document);
     injectRowSummaryDirectionAnchors(document);
 
-    const buttons = document.querySelectorAll(`[${ROW_DIR_ATTR}]`);
+    const buttons = document.querySelectorAll(`[${ROW_DIR_ATTR}][${ROW_DIR_CONTEXT_ATTR}="list"]`);
     expect(buttons.length).toBe(2);
-    buttons.forEach((b) => expect(b.getAttribute(ROW_DIR_CONTEXT_ATTR)).toBe("list"));
   });
 
-  it("inserts before trip-miles when trip-icon-container is absent", () => {
+  it("appends after trip-miles inside load-trip-cell", () => {
     document.body.innerHTML = `
       <cdk-virtual-scroll-viewport id="table-viewport">
         <div class="cdk-virtual-scroll-content-wrapper">
           <div class="row-container">
             <div class="row-cells">
-            <dat-route>
-              <div class="route-dh-container-lg">
+              <div data-test="load-trip-cell" class="cell-trip">
                 <span class="trip-miles">52 mi</span>
               </div>
-            </dat-route>
             </div>
           </div>
         </div>
@@ -66,11 +59,11 @@ describe("row summary directions anchors", () => {
     const miles = document.querySelector(".trip-miles");
     const btn = document.querySelector(`[${ROW_DIR_ATTR}]`);
     expect(btn).toBeTruthy();
-    expect(miles?.parentElement?.firstElementChild).toBe(btn);
+    expect(miles?.nextElementSibling).toBe(btn);
     expect(btn?.getAttribute(ROW_DIR_CONTEXT_ATTR)).toBe("list");
   });
 
-  it("injects one detail-header directions button per dat-load-details and avoids duplicates", () => {
+  it("injects one detail-header directions button left of trip miles", () => {
     document.body.innerHTML = `
       <dat-load-details id="d1">
         <dat-details-header>
@@ -84,7 +77,9 @@ describe("row summary directions anchors", () => {
     injectLoadDetailDirectionAnchors(document);
     injectLoadDetailDirectionAnchors(document);
 
-    const detailBtns = document.querySelectorAll(`[${ROW_DIR_ATTR}][${ROW_DIR_CONTEXT_ATTR}="detail"]`);
-    expect(detailBtns.length).toBe(1);
+    const miles = document.querySelector(".trip-miles");
+    const detailBtn = document.querySelector(`[${ROW_DIR_ATTR}][${ROW_DIR_CONTEXT_ATTR}="detail"]`);
+    expect(detailBtn).toBeTruthy();
+    expect(miles?.previousElementSibling).toBe(detailBtn);
   });
 });

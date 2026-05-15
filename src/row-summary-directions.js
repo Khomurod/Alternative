@@ -3,13 +3,61 @@ import { findDatOneViewport } from "./dat-one-virtual.js";
 const ROW_DIR_ATTR = "data-dat-ext-row-dir";
 export const ROW_DIR_CONTEXT_ATTR = "data-dat-ext-row-dir-context";
 
-/** Pin icon (inline SVG) — subtle, no external assets */
-const DIR_BTN_SVG =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-4.35 7-10a7 7 0 1 0-14 0c0 5.65 7 10 7 10z"/><circle cx="12" cy="11" r="2.5" fill="currentColor" stroke="none"/></svg>';
+const DIR_BTN_SVG = `<svg width="14" height="14" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <path d="M24 4C15.7157 4 9 10.7157 9 19C9 30.5 24 44 24 44C24 44 39 30.5 39 19C39 10.7157 32.2843 4 24 4Z" fill="#34A853"/>
+  <path d="M24 12C20.134 12 17 15.134 17 19C17 22.866 20.134 26 24 26C27.866 26 31 22.866 31 19C31 15.134 27.866 12 24 12Z" fill="#FBBC05"/>
+  <path d="M24 4C21.465 4 19.074 4.646 16.914 5.776L24 19L31.086 5.776C28.926 4.646 26.535 4 24 4Z" fill="#EA4335"/>
+  <path d="M9 19C9 20.739 9.303 22.405 9.856 23.948L16.914 5.776C12.186 7.971 9 13.111 9 19Z" fill="#4285F4"/>
+</svg>`;
 
 /**
- * Injects a small directions control next to trip miles in DAT One virtual rows.
- * Idempotent per `dat-route` (survives virtual scroll reuse when Angular replaces nodes).
+ * @param {ParentNode} row
+ * @returns {HTMLElement | null}
+ */
+function findTripCell(row) {
+  return (
+    row.querySelector('[data-test="load-trip-cell"]') ??
+    row.querySelector(".cell-trip")
+  );
+}
+
+/**
+ * @param {HTMLElement} tripCell
+ * @returns {HTMLElement | null}
+ */
+function findTripMilesElement(tripCell) {
+  const miles = tripCell.querySelector(".trip-miles");
+  if (miles instanceof HTMLElement) {
+    return miles;
+  }
+  return tripCell;
+}
+
+/**
+ * @param {Document} doc
+ * @param {HTMLElement} milesAnchor
+ * @param {"list" | "detail"} context
+ */
+function createDirectionButton(doc, milesAnchor, context) {
+  const btn = doc.createElement("button");
+  btn.type = "button";
+  btn.setAttribute(ROW_DIR_ATTR, "1");
+  btn.setAttribute(ROW_DIR_CONTEXT_ATTR, context);
+  btn.className = "dat-ext-row-dir-btn";
+  btn.title = "Open Google Maps directions (search origin → pickup → delivery)";
+  btn.setAttribute("aria-label", "Open Google Maps directions");
+  btn.innerHTML = DIR_BTN_SVG;
+
+  if (milesAnchor.classList.contains("trip-miles")) {
+    milesAnchor.insertAdjacentElement("afterend", btn);
+  } else {
+    milesAnchor.appendChild(btn);
+  }
+}
+
+/**
+ * Injects a small directions control after trip miles in DAT One virtual rows.
+ * Idempotent per row (survives virtual scroll reuse when Angular replaces nodes).
  *
  * @param {Document} doc
  */
@@ -26,48 +74,26 @@ export function injectRowSummaryDirectionAnchors(doc) {
       continue;
     }
 
-    const route = row.querySelector(".row-cells dat-route") ?? row.querySelector("dat-route");
-    if (!(route instanceof HTMLElement)) {
+    if (row.querySelector(`[${ROW_DIR_ATTR}][${ROW_DIR_CONTEXT_ATTR}="list"]`)) {
       continue;
     }
 
-    if (route.querySelector(`[${ROW_DIR_ATTR}]`)) {
+    const tripCell = findTripCell(row);
+    if (!(tripCell instanceof HTMLElement)) {
       continue;
     }
 
-    const tripIcon = route.querySelector(".trip-icon-container");
-    const miles = route.querySelector(".trip-miles");
-
-    /** @type {HTMLElement | null} */
-    let insertParent = null;
-    /** @type {ChildNode | null} */
-    let insertBefore = null;
-
-    if (tripIcon instanceof HTMLElement) {
-      insertParent = tripIcon;
-      insertBefore = tripIcon.firstChild;
-    } else if (miles?.parentElement instanceof HTMLElement) {
-      insertParent = miles.parentElement;
-      insertBefore = miles;
-    } else {
+    const milesAnchor = findTripMilesElement(tripCell);
+    if (!(milesAnchor instanceof HTMLElement)) {
       continue;
     }
 
-    const btn = doc.createElement("button");
-    btn.type = "button";
-    btn.setAttribute(ROW_DIR_ATTR, "1");
-    btn.setAttribute(ROW_DIR_CONTEXT_ATTR, "list");
-    btn.className = "dat-ext-row-dir-btn";
-    btn.title = "Open Google Maps directions (search origin → pickup → delivery)";
-    btn.setAttribute("aria-label", "Open Google Maps directions");
-    btn.innerHTML = DIR_BTN_SVG;
-
-    insertParent.insertBefore(btn, insertBefore);
+    createDirectionButton(doc, milesAnchor, "list");
   }
 }
 
 /**
- * Directions pin next to trip miles in expanded load detail (`dat-load-details` header).
+ * Directions pin immediately left of trip miles in expanded load detail (`dat-load-details` header).
  * Idempotent per host. Uses the same button pattern as list rows.
  *
  * @param {Document} doc

@@ -217,5 +217,8 @@ describe("sanitizeLocationText", () => {
   it("removes deadhead counts and noisy prefixes", () => {
     expect(sanitizeLocationText("Trip Reading, PA (46)")).toBe("Reading, PA");
     expect(sanitizeLocationText("Origin: Newark, NJ (28)")).toBe("Newark, NJ");
+    expect(sanitizeLocationText("DH 46 Tucker, GA")).toBe("Tucker, GA");
+    expect(sanitizeLocationText("Tucker, GA DH 46")).toBe("Tucker, GA");
+    expect(sanitizeLocationText("DH-O LaGrange, GA")).toBe("LaGrange, GA");
   });
 });

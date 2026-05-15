@@ -328,7 +328,12 @@ export function sanitizeLocationText(text) {
     ""
   );
 
-  const withoutDeadhead = withoutPrefix.replace(/\(\s*\d+\s*\)/g, " ");
+  const withoutDeadhead = withoutPrefix
+    .replace(/\(\s*\d+\s*\)/g, " ")
+    .replace(/\bDH[\s\-]*(?:O|D)?\s*\d*\b/gi, " ")
+    .replace(/\b\d+\s*(?:mi|miles?)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   const normalizedPunctuation = withoutDeadhead.replace(/[|•]/g, " ").replace(/\s+/g, " ").trim();
   const cityStateMatch = normalizedPunctuation.match(/([A-Za-z.' -]+),\s*([A-Z]{2})\b/i);
 

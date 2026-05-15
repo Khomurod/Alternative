@@ -9784,7 +9784,7 @@
       /^(?:trip|origin|destination|pickup|pick\s*up|drop(?:off)?|from|to|shipper|receiver)\s*[:\-]?\s*/i,
       ""
     );
-    const withoutDeadhead = withoutPrefix.replace(/\(\s*\d+\s*\)/g, " ");
+    const withoutDeadhead = withoutPrefix.replace(/\(\s*\d+\s*\)/g, " ").replace(/\bDH[\s\-]*(?:O|D)?\s*\d*\b/gi, " ").replace(/\b\d+\s*(?:mi|miles?)\b/gi, " ").replace(/\s+/g, " ").trim();
     const normalizedPunctuation = withoutDeadhead.replace(/[|•]/g, " ").replace(/\s+/g, " ").trim();
     const cityStateMatch = normalizedPunctuation.match(/([A-Za-z.' -]+),\s*([A-Z]{2})\b/i);
     if (cityStateMatch) {
@@ -11794,6 +11794,9 @@ Thank you.`;
     }
     const root = doc.body || doc;
     const selectors = [
+      'dat-search-location[data-test="origin-input"] input',
+      '[data-test="origin-input"] input',
+      'input[aria-label*="Origin"]',
       "#origin-automation input",
       "input#origin-automation",
       "dat-search-location#origin-automation input",
@@ -12154,8 +12157,7 @@ Thank you.`;
     const pickupPoint = sanitizeLocationText(pickup);
     const destination = sanitizeLocationText(delivery);
     const origin = search || pickupPoint;
-    const url = new URL("https://www.google.com/maps/dir/");
-    url.searchParams.set("api", "1");
+    const url = new URL("https://www.google.com/maps/dir/?api=1");
     url.searchParams.set("origin", origin);
     url.searchParams.set("destination", destination);
     url.searchParams.set("travelmode", "driving");
@@ -12986,7 +12988,37 @@ Thank you.`;
   // src/row-summary-directions.js
   var ROW_DIR_ATTR = "data-dat-ext-row-dir";
   var ROW_DIR_CONTEXT_ATTR = "data-dat-ext-row-dir-context";
-  var DIR_BTN_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-4.35 7-10a7 7 0 1 0-14 0c0 5.65 7 10 7 10z"/><circle cx="12" cy="11" r="2.5" fill="currentColor" stroke="none"/></svg>';
+  var DIR_BTN_SVG = `<svg width="14" height="14" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <path d="M24 4C15.7157 4 9 10.7157 9 19C9 30.5 24 44 24 44C24 44 39 30.5 39 19C39 10.7157 32.2843 4 24 4Z" fill="#34A853"/>
+  <path d="M24 12C20.134 12 17 15.134 17 19C17 22.866 20.134 26 24 26C27.866 26 31 22.866 31 19C31 15.134 27.866 12 24 12Z" fill="#FBBC05"/>
+  <path d="M24 4C21.465 4 19.074 4.646 16.914 5.776L24 19L31.086 5.776C28.926 4.646 26.535 4 24 4Z" fill="#EA4335"/>
+  <path d="M9 19C9 20.739 9.303 22.405 9.856 23.948L16.914 5.776C12.186 7.971 9 13.111 9 19Z" fill="#4285F4"/>
+</svg>`;
+  function findTripCell(row) {
+    return row.querySelector('[data-test="load-trip-cell"]') ?? row.querySelector(".cell-trip");
+  }
+  function findTripMilesElement(tripCell) {
+    const miles = tripCell.querySelector(".trip-miles");
+    if (miles instanceof HTMLElement) {
+      return miles;
+    }
+    return tripCell;
+  }
+  function createDirectionButton(doc, milesAnchor, context) {
+    const btn = doc.createElement("button");
+    btn.type = "button";
+    btn.setAttribute(ROW_DIR_ATTR, "1");
+    btn.setAttribute(ROW_DIR_CONTEXT_ATTR, context);
+    btn.className = "dat-ext-row-dir-btn";
+    btn.title = "Open Google Maps directions (search origin \u2192 pickup \u2192 delivery)";
+    btn.setAttribute("aria-label", "Open Google Maps directions");
+    btn.innerHTML = DIR_BTN_SVG;
+    if (milesAnchor.classList.contains("trip-miles")) {
+      milesAnchor.insertAdjacentElement("afterend", btn);
+    } else {
+      milesAnchor.appendChild(btn);
+    }
+  }
   function injectRowSummaryDirectionAnchors(doc) {
     const viewport = findDatOneViewport(doc);
     if (!viewport) {
@@ -12997,35 +13029,18 @@ Thank you.`;
       if (!(row instanceof HTMLElement)) {
         continue;
       }
-      const route = row.querySelector(".row-cells dat-route") ?? row.querySelector("dat-route");
-      if (!(route instanceof HTMLElement)) {
+      if (row.querySelector(`[${ROW_DIR_ATTR}][${ROW_DIR_CONTEXT_ATTR}="list"]`)) {
         continue;
       }
-      if (route.querySelector(`[${ROW_DIR_ATTR}]`)) {
+      const tripCell = findTripCell(row);
+      if (!(tripCell instanceof HTMLElement)) {
         continue;
       }
-      const tripIcon = route.querySelector(".trip-icon-container");
-      const miles = route.querySelector(".trip-miles");
-      let insertParent = null;
-      let insertBefore = null;
-      if (tripIcon instanceof HTMLElement) {
-        insertParent = tripIcon;
-        insertBefore = tripIcon.firstChild;
-      } else if (miles?.parentElement instanceof HTMLElement) {
-        insertParent = miles.parentElement;
-        insertBefore = miles;
-      } else {
+      const milesAnchor = findTripMilesElement(tripCell);
+      if (!(milesAnchor instanceof HTMLElement)) {
         continue;
       }
-      const btn = doc.createElement("button");
-      btn.type = "button";
-      btn.setAttribute(ROW_DIR_ATTR, "1");
-      btn.setAttribute(ROW_DIR_CONTEXT_ATTR, "list");
-      btn.className = "dat-ext-row-dir-btn";
-      btn.title = "Open Google Maps directions (search origin \u2192 pickup \u2192 delivery)";
-      btn.setAttribute("aria-label", "Open Google Maps directions");
-      btn.innerHTML = DIR_BTN_SVG;
-      insertParent.insertBefore(btn, insertBefore);
+      createDirectionButton(doc, milesAnchor, "list");
     }
   }
   function injectLoadDetailDirectionAnchors(doc) {

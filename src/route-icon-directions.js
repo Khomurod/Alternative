@@ -29,8 +29,7 @@ export function buildGoogleDirectionsUrl(searchOrigin, pickup, delivery) {
   const destination = sanitizeLocationText(delivery);
 
   const origin = search || pickupPoint;
-  const url = new URL("https://www.google.com/maps/dir/");
-  url.searchParams.set("api", "1");
+  const url = new URL("https://www.google.com/maps/dir/?api=1");
   url.searchParams.set("origin", origin);
   url.searchParams.set("destination", destination);
   url.searchParams.set("travelmode", "driving");
