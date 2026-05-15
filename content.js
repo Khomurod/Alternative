@@ -9848,136 +9848,6 @@
     return out;
   }
 
-  // src/numeo-map.js
-  var STATIC_MAX_POINTS = 96;
-  var STATIC_WIDTH = 360;
-  var STATIC_HEIGHT = 360;
-  function isLatLngPair(pair) {
-    return Array.isArray(pair) && pair.length >= 2 && Number.isFinite(pair[0]) && Number.isFinite(pair[1]);
-  }
-  function boundsFromLatLngs(latLngs) {
-    let minLat = Infinity;
-    let maxLat = -Infinity;
-    let minLng = Infinity;
-    let maxLng = -Infinity;
-    for (const pt of latLngs) {
-      const lat = pt?.[0];
-      const lng = pt?.[1];
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-        continue;
-      }
-      minLat = Math.min(minLat, lat);
-      maxLat = Math.max(maxLat, lat);
-      minLng = Math.min(minLng, lng);
-      maxLng = Math.max(maxLng, lng);
-    }
-    if (!Number.isFinite(minLat) || minLat === Infinity) {
-      return null;
-    }
-    return { minLat, maxLat, minLng, maxLng };
-  }
-  function mountLaneMap(container, lineLatLngs, mapOptions = {}) {
-    if (!(container instanceof HTMLElement) || !Array.isArray(lineLatLngs) || lineLatLngs.length < 2) {
-      return null;
-    }
-    if (GOOGLE_MAPS_API_KEY) {
-      const staticMap = tryMountGoogleStaticMap(container, lineLatLngs, mapOptions);
-      if (staticMap) {
-        return staticMap;
-      }
-    }
-    return mountLeafletMap(container, lineLatLngs, mapOptions);
-  }
-  function destroyLaneMap(map) {
-    if (map && typeof map.remove === "function") {
-      map.remove();
-    }
-  }
-  function tryMountGoogleStaticMap(container, lineLatLngs, mapOptions = {}) {
-    try {
-      const simplified = downsamplePolyline(lineLatLngs, STATIC_MAX_POINTS);
-      const encoded = encodePolylinePrecision5(simplified);
-      const pathStart = lineLatLngs[0];
-      const pathEnd = lineLatLngs[lineLatLngs.length - 1];
-      const pickupMarker = isLatLngPair(mapOptions.pickupLatLng) ? mapOptions.pickupLatLng : pathStart;
-      const deliveryMarker = isLatLngPair(mapOptions.deliveryLatLng) ? mapOptions.deliveryLatLng : pathEnd;
-      const params = new URLSearchParams({
-        size: `${STATIC_WIDTH}x${STATIC_HEIGHT}`,
-        scale: "2",
-        maptype: "roadmap",
-        key: GOOGLE_MAPS_API_KEY
-      });
-      const pathParam = `weight:4|color:0x2563eb|enc:${encoded}`;
-      params.append("path", pathParam);
-      const bounds = boundsFromLatLngs(lineLatLngs);
-      if (bounds) {
-        params.append("visible", `${bounds.minLat},${bounds.minLng}`);
-        params.append("visible", `${bounds.maxLat},${bounds.maxLng}`);
-      }
-      if (isLatLngPair(pickupMarker) && isLatLngPair(deliveryMarker)) {
-        params.append("markers", `color:0x0b66ff|size:mid|label:A|${pickupMarker[0]},${pickupMarker[1]}`);
-        params.append("markers", `color:0xc2410c|size:mid|label:B|${deliveryMarker[0]},${deliveryMarker[1]}`);
-      }
-      const url = `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
-      if (url.length > 7800) {
-        return null;
-      }
-      const img = document.createElement("img");
-      img.className = "dat-ext-col__static-map-img";
-      img.alt = "Lane route map (Google Static Maps)";
-      img.decoding = "async";
-      img.loading = "lazy";
-      img.src = url;
-      img.referrerPolicy = "no-referrer-when-downgrade";
-      container.replaceChildren(img);
-      return {
-        remove() {
-          img.remove();
-        },
-        invalidateSize() {
-        }
-      };
-    } catch {
-      return null;
-    }
-  }
-  function mountLeafletMap(container, lineLatLngs, mapOptions = {}) {
-    try {
-      const map = import_leaflet.default.map(container, {
-        zoomControl: true,
-        attributionControl: true,
-        preferCanvas: true
-      });
-      import_leaflet.default.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &middot; Routing &copy; OSRM'
-      }).addTo(map);
-      const polyline = import_leaflet.default.polyline(lineLatLngs, { color: "#0b66ff", weight: 4, opacity: 0.92 }).addTo(map);
-      if (isLatLngPair(mapOptions.pickupLatLng)) {
-        import_leaflet.default.marker([mapOptions.pickupLatLng[0], mapOptions.pickupLatLng[1]], {
-          icon: buildLetterMarker("A", "#0b66ff")
-        }).addTo(map);
-      }
-      if (isLatLngPair(mapOptions.deliveryLatLng)) {
-        import_leaflet.default.marker([mapOptions.deliveryLatLng[0], mapOptions.deliveryLatLng[1]], {
-          icon: buildLetterMarker("B", "#c2410c")
-        }).addTo(map);
-      }
-      map.fitBounds(polyline.getBounds().pad(0.12));
-      return map;
-    } catch {
-      return null;
-    }
-  }
-  function buildLetterMarker(letter, color) {
-    return import_leaflet.default.divIcon({
-      className: "dat-ext-col__leaflet-letter-marker",
-      html: `<span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:999px;background:${color};color:#fff;font:700 11px/1 Arial,sans-serif;border:2px solid #fff;box-shadow:0 1px 4px rgba(16,24,40,0.35);">${letter}</span>`,
-      iconSize: [22, 22],
-      iconAnchor: [11, 11]
-    });
-  }
-
   // src/tollguru-api-key.js
   var DAT_EXT_TOLLGURU_API_KEY = "datExtTollguruApiKey";
   var DEFAULT_TOLLGURU_VEHICLE_TYPE = "5AxlesTruck";
@@ -10722,7 +10592,15 @@
       ...Array.isArray(leg1?.notes) ? leg1.notes : [],
       ...Array.isArray(leg2.notes) ? leg2.notes : []
     ];
+    const leg1Line = leg1 && Array.isArray(leg1.mapLineLatLngs) ? leg1.mapLineLatLngs : [];
     const leg2Line = Array.isArray(leg2.mapLineLatLngs) ? leg2.mapLineLatLngs : [];
+    let searchOriginLatLng = null;
+    if (leg1Line.length >= 1) {
+      const leg1Start = leg1Line[0];
+      if (Array.isArray(leg1Start) && leg1Start.length >= 2 && Number.isFinite(leg1Start[0]) && Number.isFinite(leg1Start[1])) {
+        searchOriginLatLng = [leg1Start[0], leg1Start[1]];
+      }
+    }
     let pickupMapLatLng = null;
     let deliveryMapLatLng = null;
     if (leg2Line.length >= 1) {
@@ -10734,6 +10612,9 @@
       if (Array.isArray(last) && last.length >= 2 && Number.isFinite(last[0]) && Number.isFinite(last[1])) {
         deliveryMapLatLng = [last[0], last[1]];
       }
+    }
+    if (!searchOriginLatLng && samePickup && pickupMapLatLng) {
+      searchOriginLatLng = [pickupMapLatLng[0], pickupMapLatLng[1]];
     }
     return {
       laneKey: `m3:${search?.key ?? "na"}|${pickup.key}|${delivery.key}`,
@@ -10749,6 +10630,7 @@
       tollSource: typeof leg2.tollSource === "string" ? leg2.tollSource : "none",
       tollVehicleType: typeof leg2.tollVehicleType === "string" ? leg2.tollVehicleType : void 0,
       mapLineLatLngs,
+      searchOriginLatLng,
       pickupMapLatLng,
       deliveryMapLatLng,
       geocodeSources,
@@ -10975,6 +10857,182 @@
         return task;
       }
     };
+  }
+
+  // src/numeo-map.js
+  var STATIC_MAX_POINTS = 96;
+  var STATIC_WIDTH = 360;
+  var STATIC_HEIGHT = 360;
+  var OVERLAP_MERGE_MILES = 1;
+  var MARKER_COLORS = {
+    search: "#0b66ff",
+    pickup: "#16a34a",
+    delivery: "#dc2626"
+  };
+  function isLatLngPair(pair) {
+    return Array.isArray(pair) && pair.length >= 2 && Number.isFinite(pair[0]) && Number.isFinite(pair[1]);
+  }
+  function latLngsWithinMiles(a, b, maxMiles = OVERLAP_MERGE_MILES) {
+    if (!isLatLngPair(a) || !isLatLngPair(b)) {
+      return false;
+    }
+    return haversineMiles({ lat: a[0], lon: a[1] }, { lat: b[0], lon: b[1] }) <= maxMiles;
+  }
+  function resolveThreePointMarkers(mapOptions = {}) {
+    const search = isLatLngPair(mapOptions.searchOriginLatLng) ? mapOptions.searchOriginLatLng : null;
+    const pickup = isLatLngPair(mapOptions.pickupLatLng) ? mapOptions.pickupLatLng : null;
+    const delivery = isLatLngPair(mapOptions.deliveryLatLng) ? mapOptions.deliveryLatLng : null;
+    const overlap = search && pickup && latLngsWithinMiles(search, pickup, OVERLAP_MERGE_MILES);
+    const markers = [];
+    if (search && !overlap) {
+      markers.push({ latLng: search, label: "A", color: MARKER_COLORS.search });
+    }
+    if (pickup) {
+      markers.push({
+        latLng: pickup,
+        label: overlap ? "A+B" : "B",
+        color: MARKER_COLORS.pickup,
+        combined: Boolean(overlap)
+      });
+    }
+    if (delivery) {
+      markers.push({ latLng: delivery, label: "C", color: MARKER_COLORS.delivery });
+    }
+    return markers;
+  }
+  function boundsFromLatLngs(latLngs) {
+    let minLat = Infinity;
+    let maxLat = -Infinity;
+    let minLng = Infinity;
+    let maxLng = -Infinity;
+    for (const pt of latLngs) {
+      const lat = pt?.[0];
+      const lng = pt?.[1];
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        continue;
+      }
+      minLat = Math.min(minLat, lat);
+      maxLat = Math.max(maxLat, lat);
+      minLng = Math.min(minLng, lng);
+      maxLng = Math.max(maxLng, lng);
+    }
+    if (!Number.isFinite(minLat) || minLat === Infinity) {
+      return null;
+    }
+    return { minLat, maxLat, minLng, maxLng };
+  }
+  function mountLaneMap(container, lineLatLngs, mapOptions = {}) {
+    if (!(container instanceof HTMLElement) || !Array.isArray(lineLatLngs) || lineLatLngs.length < 2) {
+      return null;
+    }
+    if (GOOGLE_MAPS_API_KEY) {
+      const staticMap = tryMountGoogleStaticMap(container, lineLatLngs, mapOptions);
+      if (staticMap) {
+        return staticMap;
+      }
+    }
+    return mountLeafletMap(container, lineLatLngs, mapOptions);
+  }
+  function destroyLaneMap(map) {
+    if (map && typeof map.remove === "function") {
+      map.remove();
+    }
+  }
+  function staticMapLabel(marker) {
+    if (marker.combined) {
+      return "B";
+    }
+    const label = String(marker.label || "").trim();
+    if (label === "A+B") {
+      return "B";
+    }
+    return label.charAt(0).toUpperCase();
+  }
+  function appendStaticMapMarker(params, marker) {
+    const label = staticMapLabel(marker);
+    const color = marker.color.replace("#", "0x");
+    params.append(
+      "markers",
+      `color:${color}|size:mid|label:${label}|${marker.latLng[0]},${marker.latLng[1]}`
+    );
+  }
+  function tryMountGoogleStaticMap(container, lineLatLngs, mapOptions = {}) {
+    try {
+      const simplified = downsamplePolyline(lineLatLngs, STATIC_MAX_POINTS);
+      const encoded = encodePolylinePrecision5(simplified);
+      const markers = resolveThreePointMarkers(mapOptions);
+      const params = new URLSearchParams({
+        size: `${STATIC_WIDTH}x${STATIC_HEIGHT}`,
+        scale: "2",
+        maptype: "roadmap",
+        key: GOOGLE_MAPS_API_KEY
+      });
+      const pathParam = `weight:4|color:0x2563eb|enc:${encoded}`;
+      params.append("path", pathParam);
+      const bounds = boundsFromLatLngs(lineLatLngs);
+      if (bounds) {
+        params.append("visible", `${bounds.minLat},${bounds.minLng}`);
+        params.append("visible", `${bounds.maxLat},${bounds.maxLng}`);
+      }
+      for (const marker of markers) {
+        appendStaticMapMarker(params, marker);
+      }
+      const url = `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
+      if (url.length > 7800) {
+        return null;
+      }
+      const img = document.createElement("img");
+      img.className = "dat-ext-col__static-map-img";
+      img.alt = "Lane route map (Google Static Maps)";
+      img.decoding = "async";
+      img.loading = "lazy";
+      img.src = url;
+      img.referrerPolicy = "no-referrer-when-downgrade";
+      container.replaceChildren(img);
+      return {
+        remove() {
+          img.remove();
+        },
+        invalidateSize() {
+        }
+      };
+    } catch {
+      return null;
+    }
+  }
+  function mountLeafletMap(container, lineLatLngs, mapOptions = {}) {
+    try {
+      const map = import_leaflet.default.map(container, {
+        zoomControl: true,
+        attributionControl: true,
+        preferCanvas: true
+      });
+      import_leaflet.default.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &middot; Routing &copy; OSRM'
+      }).addTo(map);
+      const polyline = import_leaflet.default.polyline(lineLatLngs, { color: "#0b66ff", weight: 4, opacity: 0.92 }).addTo(map);
+      for (const marker of resolveThreePointMarkers(mapOptions)) {
+        import_leaflet.default.marker([marker.latLng[0], marker.latLng[1]], {
+          icon: buildLetterMarker(marker.label, marker.color, marker.combined)
+        }).addTo(map);
+      }
+      map.fitBounds(polyline.getBounds().pad(0.12));
+      return map;
+    } catch {
+      return null;
+    }
+  }
+  function buildLetterMarker(letter, color, combined = false) {
+    const width = combined ? 30 : 22;
+    const height = 22;
+    const fontSize = combined ? 9 : 11;
+    return import_leaflet.default.divIcon({
+      className: "dat-ext-col__leaflet-letter-marker",
+      html: `<span style="display:inline-flex;align-items:center;justify-content:center;min-width:${width}px;height:${height}px;padding:0 4px;border-radius:999px;background:${color};color:#fff;font:700 ${fontSize}px/1 Arial,sans-serif;border:2px solid #fff;box-shadow:0 1px 4px rgba(16,24,40,0.35);white-space:nowrap;">${letter}</span>`,
+      iconSize: [width, height],
+      iconAnchor: [Math.round(width / 2), Math.round(height / 2)]
+    });
   }
 
   // src/email-template.js
@@ -11675,6 +11733,7 @@ Thank you.`;
     const lineLatLngs = Array.isArray(route?.mapLineLatLngs) ? route.mapLineLatLngs : null;
     if (lineLatLngs && lineLatLngs.length >= 2) {
       ctx.mapInstance = mountLaneMap(mapCanvas, lineLatLngs, {
+        searchOriginLatLng: Array.isArray(route?.searchOriginLatLng) ? route.searchOriginLatLng : null,
         pickupLatLng: Array.isArray(route?.pickupMapLatLng) ? route.pickupMapLatLng : null,
         deliveryLatLng: Array.isArray(route?.deliveryMapLatLng) ? route.deliveryMapLatLng : null
       });
@@ -12092,15 +12151,18 @@ Thank you.`;
   }
   function buildGoogleDirectionsUrl(searchOrigin, pickup, delivery) {
     const search = sanitizeLocationText(searchOrigin);
-    const origin = search || sanitizeLocationText(pickup);
     const pickupPoint = sanitizeLocationText(pickup);
     const destination = sanitizeLocationText(delivery);
+    const origin = search || pickupPoint;
     const url = new URL("https://www.google.com/maps/dir/");
     url.searchParams.set("api", "1");
     url.searchParams.set("origin", origin);
     url.searchParams.set("destination", destination);
     url.searchParams.set("travelmode", "driving");
-    if (pickupPoint && origin.toLowerCase() !== pickupPoint.toLowerCase()) {
+    const searchLoc = parseCityState(search);
+    const pickupLoc = parseCityState(pickupPoint);
+    const sameOrigin = searchLoc && pickupLoc && normalizeCityStateKey(searchLoc.city, searchLoc.state) === normalizeCityStateKey(pickupLoc.city, pickupLoc.state);
+    if (pickupPoint && !sameOrigin && search) {
       url.searchParams.set("waypoints", pickupPoint);
     }
     return url.toString();

@@ -609,5 +609,8 @@ describe("createRouteInspector", () => {
     expect(combined?.tollSource).toBe("tollguru");
     expect(combined?.tollVehicleType).toBe("5AxlesTruck");
     expect(combined?.tollStatus).toBe("USD 33.06 est (TollGuru)");
+    expect(combined?.searchOriginLatLng).toEqual([33.74, -84.39]);
+    expect(combined?.pickupMapLatLng).toEqual([33.85, -84.21]);
+    expect(combined?.deliveryMapLatLng).toEqual([45.32, -92.7]);
   });
 });

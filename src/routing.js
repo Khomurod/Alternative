@@ -712,7 +712,17 @@ export async function inspectDispatcherM3Route(routeInspector, searchOriginText,
     ...(Array.isArray(leg2.notes) ? leg2.notes : [])
   ];
 
+  const leg1Line = leg1 && Array.isArray(leg1.mapLineLatLngs) ? leg1.mapLineLatLngs : [];
   const leg2Line = Array.isArray(leg2.mapLineLatLngs) ? leg2.mapLineLatLngs : [];
+
+  let searchOriginLatLng = null;
+  if (leg1Line.length >= 1) {
+    const leg1Start = leg1Line[0];
+    if (Array.isArray(leg1Start) && leg1Start.length >= 2 && Number.isFinite(leg1Start[0]) && Number.isFinite(leg1Start[1])) {
+      searchOriginLatLng = [leg1Start[0], leg1Start[1]];
+    }
+  }
+
   let pickupMapLatLng = null;
   let deliveryMapLatLng = null;
   if (leg2Line.length >= 1) {
@@ -724,6 +734,10 @@ export async function inspectDispatcherM3Route(routeInspector, searchOriginText,
     if (Array.isArray(last) && last.length >= 2 && Number.isFinite(last[0]) && Number.isFinite(last[1])) {
       deliveryMapLatLng = [last[0], last[1]];
     }
+  }
+
+  if (!searchOriginLatLng && samePickup && pickupMapLatLng) {
+    searchOriginLatLng = [pickupMapLatLng[0], pickupMapLatLng[1]];
   }
 
   return {
@@ -740,6 +754,7 @@ export async function inspectDispatcherM3Route(routeInspector, searchOriginText,
     tollSource: typeof leg2.tollSource === "string" ? leg2.tollSource : "none",
     tollVehicleType: typeof leg2.tollVehicleType === "string" ? leg2.tollVehicleType : undefined,
     mapLineLatLngs,
+    searchOriginLatLng,
     pickupMapLatLng,
     deliveryMapLatLng,
     geocodeSources,

@@ -813,6 +813,7 @@ export function renderColumn(card, ctx) {
   const lineLatLngs = Array.isArray(route?.mapLineLatLngs) ? route.mapLineLatLngs : null;
   if (lineLatLngs && lineLatLngs.length >= 2) {
     ctx.mapInstance = mountLaneMap(mapCanvas, lineLatLngs, {
+      searchOriginLatLng: Array.isArray(route?.searchOriginLatLng) ? route.searchOriginLatLng : null,
       pickupLatLng: Array.isArray(route?.pickupMapLatLng) ? route.pickupMapLatLng : null,
       deliveryLatLng: Array.isArray(route?.deliveryMapLatLng) ? route.deliveryMapLatLng : null
     });
