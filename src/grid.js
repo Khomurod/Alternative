@@ -188,12 +188,60 @@ export function scoreLoadsTable(table) {
 }
 
 /**
+ * @param {HTMLElement} scope
+ * @returns {HTMLElement | HTMLTableElement | null}
+ */
+function resolveGridSurfaceFromScope(scope) {
+  if (!(scope instanceof HTMLElement)) {
+    return null;
+  }
+
+  if (scope instanceof HTMLTableElement) {
+    return scope;
+  }
+
+  const role = scope.getAttribute("role");
+  if (role === "grid" || role === "treegrid") {
+    return scope;
+  }
+
+  const tableAncestor = scope.closest("table");
+  if (tableAncestor instanceof HTMLTableElement) {
+    return tableAncestor;
+  }
+
+  const gridAncestor = scope.closest('[role="grid"], [role="treegrid"]');
+  if (gridAncestor instanceof HTMLElement) {
+    return gridAncestor;
+  }
+
+  return null;
+}
+
+/**
  * @param {Document} doc
  * @param {{ scope?: HTMLElement | null, allowDocumentDeepScan?: boolean }} [options]
  * @returns {HTMLElement | HTMLTableElement | null}
  */
 export function findResultsGrid(doc, options = {}) {
   const { scope = null, allowDocumentDeepScan = true } = options;
+
+  if (scope instanceof HTMLElement) {
+    const direct = resolveGridSurfaceFromScope(scope);
+    if (direct) {
+      const score =
+        direct instanceof HTMLTableElement ? scoreLoadsTable(direct) : scoreAriaGrid(/** @type {HTMLElement} */ (direct));
+      if (score >= 4) {
+        return direct;
+      }
+      // Row/detail mutations: the ancestor table or ARIA grid is the decorate target even
+      // when virtual scroll has not yet painted headers into this subtree.
+      if (direct !== scope && direct.contains(scope)) {
+        return direct;
+      }
+    }
+  }
+
   /** @type {HTMLElement[]} */
   const roots = [];
 

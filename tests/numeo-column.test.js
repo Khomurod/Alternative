@@ -4,9 +4,11 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  createColumnDOM,
   findRateInsertion,
   findRateRowInsertion,
   removeAllTomRows,
+  renderColumn,
   TOM_COLUMN_CLASS,
   TOM_PANEL_CLASS,
   TOM_ROW_CLASS
@@ -135,6 +137,43 @@ describe("findRateInsertion (dual layout)", () => {
   it("returns null when no rate container exists anywhere", () => {
     document.body.innerHTML = `<dat-load-details id="host"></dat-load-details>`;
     expect(findRateInsertion(document.getElementById("host"))).toBeNull();
+  });
+});
+
+describe("createColumnDOM", () => {
+  it("applies transparent grid-cell shell styles", () => {
+    const { shadow, card } = createColumnDOM(document, { gridCell: true });
+    const css = shadow.querySelector("style")?.textContent || "";
+    expect(css).toContain("background: transparent");
+    expect(css).toContain("border: none");
+    expect(css).toContain("padding: 4px");
+    expect(card.className).toBe("card");
+  });
+
+  it("renderColumn fills metrics and keeps actions visible", () => {
+    const { card } = createColumnDOM(document, { gridCell: true });
+    renderColumn(card, {
+      data: {
+        origin: "A",
+        destination: "B",
+        tripMiles: 100,
+        rateDollars: 500,
+        rpmHint: 5,
+        companyName: "Co",
+        contactEmail: "a@b.com"
+      },
+      route: null,
+      loadingRoute: false,
+      offerTpl: "",
+      bookingTpl: "",
+      templateMode: "default",
+      shadowHost: null,
+      onRefreshRoute: null,
+      mapInstance: null
+    });
+    expect(card.textContent).toContain("Load Intelligence");
+    expect(card.querySelector('[data-role="rpm"]')).toBeTruthy();
+    expect(card.querySelector(".actions")).toBeTruthy();
   });
 });
 

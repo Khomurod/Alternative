@@ -9793,49 +9793,6 @@
     return normalizedPunctuation;
   }
 
-  // src/email-template.js
-  var EMAIL_OFFER_TEMPLATE_KEY = "dat-ext-email-offer-template-v1";
-  var EMAIL_BOOKING_TEMPLATE_KEY = "dat-ext-email-booking-template-v1";
-  function interpolateEmailTemplate(template, vars) {
-    const raw = String(template ?? "").trim();
-    if (!raw) {
-      return null;
-    }
-    const origin = vars.origin ?? "";
-    const destination = vars.destination ?? "";
-    const company = vars.companyName ?? "";
-    const email = vars.contactEmail ?? "";
-    return raw.replaceAll("{{origin}}", origin).replaceAll("{{destination}}", destination).replaceAll("{{company}}", company).replaceAll("{{email}}", email);
-  }
-
-  // src/gmail-compose.js
-  var GMAIL_COMPOSE_URL_MAX_LENGTH = 1900;
-  function buildMailtoUrl(to, subject, body) {
-    const email = String(to ?? "").trim();
-    const params = new URLSearchParams({ subject: String(subject ?? ""), body: String(body ?? "") });
-    return `mailto:${email}?${params.toString()}`;
-  }
-  function buildGmailComposeUrl(to, subject, body) {
-    const url = new URL("https://mail.google.com/mail/");
-    url.searchParams.set("view", "cm");
-    url.searchParams.set("fs", "1");
-    const addr = String(to ?? "").trim();
-    if (addr) {
-      url.searchParams.set("to", addr);
-    }
-    url.searchParams.set("su", String(subject ?? ""));
-    url.searchParams.set("body", String(body ?? ""));
-    return url.toString();
-  }
-  function pickGmailComposeOrMailto(to, subject, body, options = {}) {
-    const maxLength = options.maxLength ?? GMAIL_COMPOSE_URL_MAX_LENGTH;
-    const gmail = buildGmailComposeUrl(to, subject, body);
-    if (gmail.length <= maxLength) {
-      return { href: gmail, usedGmail: true };
-    }
-    return { href: buildMailtoUrl(to, subject, body), usedGmail: false };
-  }
-
   // src/numeo-map.js
   var import_leaflet = __toESM(require_leaflet_src(), 1);
 
@@ -11020,10 +10977,60 @@
     };
   }
 
+  // src/email-template.js
+  var EMAIL_OFFER_TEMPLATE_KEY = "dat-ext-email-offer-template-v1";
+  var EMAIL_BOOKING_TEMPLATE_KEY = "dat-ext-email-booking-template-v1";
+  function interpolateEmailTemplate(template, vars) {
+    const raw = String(template ?? "").trim();
+    if (!raw) {
+      return null;
+    }
+    const origin = vars.origin ?? "";
+    const destination = vars.destination ?? "";
+    const company = vars.companyName ?? "";
+    const email = vars.contactEmail ?? "";
+    return raw.replaceAll("{{origin}}", origin).replaceAll("{{destination}}", destination).replaceAll("{{company}}", company).replaceAll("{{email}}", email);
+  }
+
+  // src/gmail-compose.js
+  var GMAIL_COMPOSE_URL_MAX_LENGTH = 1900;
+  function buildMailtoUrl(to, subject, body) {
+    const email = String(to ?? "").trim();
+    const params = new URLSearchParams({ subject: String(subject ?? ""), body: String(body ?? "") });
+    return `mailto:${email}?${params.toString()}`;
+  }
+  function buildGmailComposeUrl(to, subject, body) {
+    const url = new URL("https://mail.google.com/mail/");
+    url.searchParams.set("view", "cm");
+    url.searchParams.set("fs", "1");
+    const addr = String(to ?? "").trim();
+    if (addr) {
+      url.searchParams.set("to", addr);
+    }
+    url.searchParams.set("su", String(subject ?? ""));
+    url.searchParams.set("body", String(body ?? ""));
+    return url.toString();
+  }
+  function pickGmailComposeOrMailto(to, subject, body, options = {}) {
+    const maxLength = options.maxLength ?? GMAIL_COMPOSE_URL_MAX_LENGTH;
+    const gmail = buildGmailComposeUrl(to, subject, body);
+    if (gmail.length <= maxLength) {
+      return { href: gmail, usedGmail: true };
+    }
+    return { href: buildMailtoUrl(to, subject, body), usedGmail: false };
+  }
+
   // src/numeo-column.js
   var TOM_ROW_CLASS = "dat-ext-tom-row";
   var TOM_COLUMN_CLASS = "dat-ext-tom-column";
   var TOM_PANEL_CLASS = "dat-ext-tom-panel";
+  var TOM_HOST_DATASET = "datExtTomHost";
+  var DEFAULT_CELL_TYPOGRAPHY = {
+    fontFamily: '"Sequel Sans", Helvetica, Arial, sans-serif',
+    fontSize: "12px",
+    color: "#101828",
+    lineHeight: "1.25"
+  };
   function findRateInsertion(detailHost) {
     if (!(detailHost instanceof HTMLElement)) {
       return null;
@@ -11105,15 +11112,6 @@
     }
     return null;
   }
-
-  // src/detail-panel.js
-  var TOM_HOST_DATASET = "datExtTomHost";
-  var DEFAULT_CELL_TYPOGRAPHY = {
-    fontFamily: '"Sequel Sans", Helvetica, Arial, sans-serif',
-    fontSize: "12px",
-    color: "#101828",
-    lineHeight: "1.25"
-  };
   function readDatNativeCellTypography(doc) {
     if (!doc?.querySelector) {
       return { ...DEFAULT_CELL_TYPOGRAPHY };
@@ -11130,7 +11128,8 @@
       lineHeight: computed.lineHeight || DEFAULT_CELL_TYPOGRAPHY.lineHeight
     };
   }
-  function buildShadowStyles(typography, compactColumn) {
+  function buildColumnStyles(typography, gridCell) {
+    const cardSurface = gridCell ? "background: transparent; border: none; padding: 4px;" : "border: 1px solid #dfe3ea; border-radius: 6px; background: #ffffff; padding: 10px;";
     return `
 :host {
   all: initial;
@@ -11151,10 +11150,10 @@
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: ${compactColumn ? "6px" : "10px"};
+  gap: ${gridCell ? "6px" : "10px"};
   overflow: hidden;
   min-width: 0;
-  ${compactColumn ? "border: none; border-radius: 0; background: transparent; padding: 0;" : "border: 1px solid #dfe3ea; border-radius: 6px; background: #ffffff; padding: 10px;"}
+  ${cardSurface}
 }
 
 .panel-header {
@@ -11176,25 +11175,25 @@
 .actions {
   display: flex;
   flex-direction: row;
-  flex-wrap: nowrap;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
   align-items: center;
 }
 
 .btn {
-  height: 30px;
+  height: ${gridCell ? "26px" : "30px"};
   border: 1px solid #cfd6e5;
   border-radius: 5px;
   background: #ffffff;
   color: #2d466f;
-  font-size: 12px;
+  font-size: inherit;
   font-weight: 700;
   cursor: pointer;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 14px;
+  padding: 0 10px;
   font-family: inherit;
   white-space: nowrap;
 }
@@ -11216,8 +11215,8 @@
 
 .metrics-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(76px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(${gridCell ? "2" : "4"}, minmax(${gridCell ? "64px" : "76px"}, 1fr));
+  gap: ${gridCell ? "4px 8px" : "8px"};
   align-items: end;
 }
 
@@ -11229,13 +11228,14 @@
 }
 
 .metric--toll {
-  min-width: 132px;
+  min-width: ${gridCell ? "0" : "132px"};
 }
 
 .metric-toll-source {
-  font-size: 10px;
+  font-size: 0.85em;
   font-weight: 600;
-  color: #7a8799;
+  color: inherit;
+  opacity: 0.72;
   line-height: 1.3;
   margin-top: 2px;
   padding: 0 2px;
@@ -11252,16 +11252,17 @@
   letter-spacing: 0.02em;
 }
 
-.metric-input {
-  height: ${compactColumn ? "28px" : "34px"};
+.metric-input,
+.metric-value {
+  height: ${gridCell ? "28px" : "34px"};
   width: 100%;
-  border: 1px solid ${compactColumn ? "transparent" : "#d3dae7"};
-  border-radius: ${compactColumn ? "0" : "4px"};
-  background: ${compactColumn ? "transparent" : "#ffffff"};
+  border: 1px solid ${gridCell ? "transparent" : "#d3dae7"};
+  border-radius: ${gridCell ? "0" : "4px"};
+  background: ${gridCell ? "transparent" : "#ffffff"};
   color: inherit;
   font-size: inherit;
   font-weight: 600;
-  padding: 0 ${compactColumn ? "2px" : "10px"};
+  padding: 0 ${gridCell ? "2px" : "10px"};
   font-family: inherit;
   outline: none;
 }
@@ -11270,46 +11271,36 @@
   box-shadow: 0 0 0 2px rgba(78, 121, 255, 0.14);
 }
 .metric-input[readonly] {
-  background: ${compactColumn ? "transparent" : "#fbfcff"};
-  color: inherit;
+  background: ${gridCell ? "transparent" : "#fbfcff"};
 }
 
 .metric-value {
-  height: ${compactColumn ? "28px" : "34px"};
-  width: 100%;
-  border: 1px solid ${compactColumn ? "transparent" : "#d3dae7"};
-  border-radius: ${compactColumn ? "0" : "4px"};
-  background: ${compactColumn ? "transparent" : "#fbfcff"};
-  color: inherit;
-  font-size: inherit;
-  font-weight: 600;
   display: inline-flex;
   align-items: center;
-  padding: 0 ${compactColumn ? "2px" : "10px"};
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .map-wrap {
-  border: ${compactColumn ? "none" : "1px solid #e6ebf4"};
-  border-radius: ${compactColumn ? "0" : "6px"};
+  border: ${gridCell ? "none" : "1px solid #e6ebf4"};
+  border-radius: ${gridCell ? "0" : "6px"};
   overflow: hidden;
-  background: ${compactColumn ? "transparent" : "#f8faff"};
+  background: ${gridCell ? "transparent" : "#f8faff"};
   width: 100%;
-  max-width: ${compactColumn ? "100%" : "360px"};
+  max-width: ${gridCell ? "100%" : "360px"};
 }
 
 .map-canvas {
   width: 100%;
   aspect-ratio: 1 / 1;
-  min-height: 220px;
+  min-height: ${gridCell ? "140px" : "220px"};
   background: #eef2f8;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #60708a;
-  font-size: 11px;
+  font-size: 0.92em;
   font-weight: 600;
   text-align: center;
   padding: 8px;
@@ -11331,25 +11322,9 @@
   opacity: 0.72;
 }
 
-.card--grid-cell .panel-header,
-.card--grid-cell .actions {
-  display: none;
-}
-
-.card--grid-cell .metrics-row {
-  grid-template-columns: repeat(2, minmax(64px, 1fr));
-  gap: 4px 8px;
-}
-
-.card--grid-cell .map-wrap,
-.card--grid-cell .notes {
-  display: none;
-}
-
 @media (max-width: 980px) {
   .actions {
     width: 100%;
-    flex-wrap: wrap;
   }
   .map-wrap {
     max-width: 100%;
@@ -11366,13 +11341,94 @@
 }
 `;
   }
-  function visibleText(element) {
-    return String(element?.innerText || element?.textContent || "").replace(/\s+/g, " ").trim();
+  function createColumnDOM(doc, options = {}) {
+    const { gridCell = false } = options;
+    const typography = readDatNativeCellTypography(doc);
+    const host = document.createElement("section");
+    host.className = TOM_PANEL_CLASS;
+    host.dataset[TOM_HOST_DATASET] = "1";
+    const shadow = host.attachShadow({ mode: "open" });
+    shadow.innerHTML = "";
+    const style = document.createElement("style");
+    style.textContent = buildColumnStyles(typography, gridCell);
+    shadow.appendChild(style);
+    const card = document.createElement("section");
+    card.className = "card";
+    card.setAttribute("data-role", "tom-load-intelligence");
+    shadow.appendChild(card);
+    return { host, shadow, card };
   }
-  function looksLikeCompanyName(text) {
-    return /\b(logistics|freight|transport|trucking|solutions|broker|sales|carrier|shipping|express|inc|llc|corp|co)\b/i.test(
-      text
-    );
+  function buildTextEl(tag, className, text) {
+    const el = document.createElement(tag);
+    if (className) {
+      el.className = className;
+    }
+    if (text !== void 0 && text !== null) {
+      el.textContent = text;
+    }
+    return el;
+  }
+  function buildActionButton(label, options = {}) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn";
+    button.textContent = label;
+    if (options.variant === "ghost") {
+      button.classList.add("btn--ghost");
+    }
+    if (options.disabled) {
+      button.disabled = true;
+      button.setAttribute("aria-disabled", "true");
+    } else if (typeof options.onClick === "function") {
+      button.addEventListener("click", options.onClick);
+    }
+    if (options.dataRole) {
+      button.dataset.role = options.dataRole;
+    }
+    return button;
+  }
+  function buildMetricField(label, value, dataRole, options = {}) {
+    const { readOnly = true } = options;
+    const field = document.createElement("label");
+    field.className = "metric";
+    const labelEl = buildTextEl("span", "metric-label", label);
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = value;
+    input.readOnly = readOnly;
+    input.className = "metric-input";
+    input.dataset.role = dataRole;
+    field.append(labelEl, input);
+    return field;
+  }
+  function buildTollMetricDisplayField(label, mainValue, subtitle, dataRole) {
+    const field = document.createElement("div");
+    field.className = "metric metric--toll";
+    const labelEl = buildTextEl("span", "metric-label", label);
+    const val = buildTextEl("div", "metric-value", mainValue);
+    val.dataset.role = dataRole;
+    const sub = buildTextEl("div", "metric-toll-source", subtitle);
+    sub.dataset.role = "toll-source";
+    field.append(labelEl, val, sub);
+    return field;
+  }
+  function buildMailto(email, subject, body) {
+    const params = new URLSearchParams({ subject, body });
+    return `mailto:${email ?? ""}?${params.toString()}`;
+  }
+  function defaultOfferBody(data) {
+    return `Hello ${data.companyName || ""},
+
+I am reaching out regarding the load from ${data.origin || "Origin"} to ${data.destination || "Destination"}. Is this still available?
+
+Thank you.`;
+  }
+  function defaultBookingBody(data) {
+    return `Hello ${data.companyName || ""},
+
+I would like to discuss booking the load from ${data.origin || "Origin"} to ${data.destination || "Destination"}.
+
+Thank you.`;
   }
   function formatMoney(value) {
     return Number.isFinite(value) ? `${Math.round(value).toLocaleString("en-US")}` : "0";
@@ -11397,10 +11453,7 @@
       return "Loading...";
     }
     const text = String(value || "").trim();
-    if (!text) {
-      return "Unavailable";
-    }
-    return text;
+    return text || "Unavailable";
   }
   function formatTollVehicleCaption(vehicleType) {
     if (typeof vehicleType !== "string" || !vehicleType.trim()) {
@@ -11443,6 +11496,187 @@
       return "";
     }
     return String(value);
+  }
+  function renderColumn(card, ctx) {
+    const { data, route, loadingRoute, offerTpl, bookingTpl, templateMode, shadowHost, onRefreshRoute } = ctx;
+    card.replaceChildren();
+    const roadMiles = !loadingRoute && route?.adjustedMiles !== null && route?.adjustedMiles !== void 0 && Number.isFinite(route.adjustedMiles) && route.adjustedMiles > 0 ? route.adjustedMiles : null;
+    const datTripMiles = data.tripMiles !== null && data.tripMiles !== void 0 && Number.isFinite(data.tripMiles) && data.tripMiles > 0 ? data.tripMiles : null;
+    const milesForRpm = roadMiles ?? datTripMiles;
+    const hasPostedRate = data.rateDollars !== null && data.rateDollars > 0;
+    let effectiveRate = null;
+    if (hasPostedRate) {
+      effectiveRate = data.rateDollars;
+    } else if (shadowHost) {
+      const ur = shadowHost.__datExtUserRate;
+      if (typeof ur === "number" && Number.isFinite(ur) && ur > 0) {
+        effectiveRate = ur;
+      }
+    }
+    const calculatedRpm = resolveDetailPanelRpm(effectiveRate, datTripMiles, roadMiles, data.rpmHint ?? null);
+    const offerSubject = `Offer for Load: ${data.origin || "Origin"} to ${data.destination || "Destination"}`;
+    const bookingSubject = `Booking Request: ${data.origin || "Origin"} to ${data.destination || "Destination"}`;
+    const vars = {
+      origin: data.origin || "Origin",
+      destination: data.destination || "Destination",
+      companyName: data.companyName || "",
+      contactEmail: data.contactEmail || ""
+    };
+    const offerBodyBase = interpolateEmailTemplate(offerTpl, vars) ?? defaultOfferBody(data);
+    const bookingBodyBase = interpolateEmailTemplate(bookingTpl, vars) ?? defaultBookingBody(data);
+    const offerBody = templateMode === "booking" ? bookingBodyBase : offerBodyBase;
+    const bookingBody = templateMode === "offer" ? offerBodyBase : bookingBodyBase;
+    const actions = document.createElement("div");
+    actions.className = "actions";
+    actions.append(
+      buildActionButton("Send Offer Email", {
+        disabled: !data.contactEmail,
+        dataRole: "offer-email",
+        onClick: () => {
+          window.location.href = buildMailto(data.contactEmail, offerSubject, offerBody);
+        }
+      }),
+      buildActionButton("Open Offer in Gmail", {
+        disabled: !data.contactEmail,
+        dataRole: "offer-gmail",
+        variant: "ghost",
+        onClick: () => {
+          const picked = pickGmailComposeOrMailto(data.contactEmail, offerSubject, offerBody);
+          if (picked.usedGmail) {
+            window.open(picked.href, "_blank", "noopener,noreferrer");
+          } else {
+            window.location.href = picked.href;
+          }
+        }
+      }),
+      buildActionButton("Send Booking Email", {
+        disabled: !data.contactEmail,
+        dataRole: "booking-email",
+        onClick: () => {
+          window.location.href = buildMailto(data.contactEmail, bookingSubject, bookingBody);
+        }
+      }),
+      buildActionButton("Open Booking in Gmail", {
+        disabled: !data.contactEmail,
+        dataRole: "booking-gmail",
+        variant: "ghost",
+        onClick: () => {
+          const picked = pickGmailComposeOrMailto(data.contactEmail, bookingSubject, bookingBody);
+          if (picked.usedGmail) {
+            window.open(picked.href, "_blank", "noopener,noreferrer");
+          } else {
+            window.location.href = picked.href;
+          }
+        }
+      }),
+      buildActionButton("Get Tolls", {
+        disabled: typeof onRefreshRoute !== "function" || loadingRoute,
+        dataRole: "get-tolls",
+        onClick: () => {
+          if (typeof onRefreshRoute === "function") {
+            onRefreshRoute();
+          }
+        }
+      })
+    );
+    const rpmField = buildMetricField("RPM $", formatOptionalRpm(calculatedRpm), "rpm");
+    const rateDisplay = hasPostedRate ? formatMoney(data.rateDollars) : formatUserRateInputValue(shadowHost?.__datExtUserRate);
+    const rateField = buildMetricField("RATE $", rateDisplay, "rate", { readOnly: hasPostedRate });
+    const milesField = buildMetricField("MILES", formatOptionalMiles(milesForRpm, loadingRoute), "miles");
+    const tollField = buildTollMetricDisplayField(
+      "TOLL EST",
+      tollMainLineDisplay(route?.tollStatus, route?.tollSource, loadingRoute),
+      formatTollSourceSubtitle(route, loadingRoute),
+      "toll"
+    );
+    const metricsCluster = document.createElement("div");
+    metricsCluster.className = "metrics-row";
+    metricsCluster.append(rpmField, rateField, milesField, tollField);
+    const top = document.createElement("div");
+    top.className = "panel-header";
+    top.append(buildTextEl("span", "title", "Load Intelligence"), actions);
+    card.append(top, metricsCluster);
+    if (!hasPostedRate && shadowHost) {
+      const rateInput = rateField.querySelector("input");
+      if (rateInput instanceof HTMLInputElement) {
+        rateInput.placeholder = "Total $";
+        rateInput.addEventListener("input", () => {
+          const raw = rateInput.value.replace(/,/g, "").trim();
+          const num = Number.parseFloat(raw);
+          shadowHost.__datExtUserRate = Number.isFinite(num) && num > 0 ? num : null;
+          const miles = shadowHost.__datExtRouteData?.adjustedMiles ?? data.tripMiles;
+          const mr = typeof miles === "number" && Number.isFinite(miles) && miles > 0 ? miles : null;
+          const eff = shadowHost.__datExtUserRate;
+          const rpmInput = metricsCluster.querySelector('[data-role="rpm"]');
+          if (rpmInput instanceof HTMLInputElement) {
+            rpmInput.value = mr && eff ? formatRpm(eff / mr) : "--";
+          }
+        });
+      }
+    }
+    const mapWrap = document.createElement("div");
+    mapWrap.className = "map-wrap";
+    const mapCanvas = document.createElement("div");
+    mapCanvas.className = "map-canvas";
+    mapCanvas.dataset.role = "lane-map";
+    mapWrap.appendChild(mapCanvas);
+    card.appendChild(mapWrap);
+    const lineLatLngs = Array.isArray(route?.mapLineLatLngs) ? route.mapLineLatLngs : null;
+    if (lineLatLngs && lineLatLngs.length >= 2) {
+      ctx.mapInstance = mountLaneMap(mapCanvas, lineLatLngs, {
+        pickupLatLng: Array.isArray(route?.pickupMapLatLng) ? route.pickupMapLatLng : null,
+        deliveryLatLng: Array.isArray(route?.deliveryMapLatLng) ? route.deliveryMapLatLng : null
+      });
+    } else {
+      ctx.mapInstance = null;
+    }
+    if (!ctx.mapInstance) {
+      mapCanvas.textContent = loadingRoute ? "Loading route map..." : "Route map unavailable";
+    }
+    const notes = document.createElement("div");
+    notes.className = "notes";
+    const routeSource = String(route?.routeSource || (loadingRoute ? "Loading route..." : "Unavailable"));
+    notes.appendChild(buildTextEl("div", "", `Route source: ${routeSource}`));
+    if (route?.routeConfidence) {
+      notes.appendChild(buildTextEl("div", "", `Confidence: ${String(route.routeConfidence)}`));
+    }
+    const firstNote = Array.isArray(route?.notes) ? route.notes[0] : "";
+    if (firstNote) {
+      notes.appendChild(buildTextEl("div", "", String(firstNote)));
+    }
+    card.appendChild(notes);
+  }
+  function buildAssistRowWrapper(mode, doc = document) {
+    if (mode === "column-before") {
+      const column2 = document.createElement("div");
+      column2.className = `details-column ${TOM_COLUMN_CLASS} dat-ext-injected`;
+      column2.style.display = "flex";
+      column2.style.flexDirection = "column";
+      column2.style.justifyContent = "center";
+      column2.style.flex = "1 1 0";
+      column2.style.minWidth = "0";
+      const { host: host2 } = createColumnDOM(doc, { gridCell: true });
+      column2.appendChild(host2);
+      return { wrapper: column2, host: host2 };
+    }
+    const row = document.createElement("div");
+    row.className = `table-details-row row-spacing ${TOM_ROW_CLASS} dat-ext-injected`;
+    const column = document.createElement("div");
+    column.className = `details-column ${TOM_COLUMN_CLASS}`;
+    row.appendChild(column);
+    const { host } = createColumnDOM(doc, { gridCell: false });
+    column.appendChild(host);
+    return { wrapper: row, host };
+  }
+
+  // src/detail-panel.js
+  function visibleText(element) {
+    return String(element?.innerText || element?.textContent || "").replace(/\s+/g, " ").trim();
+  }
+  function looksLikeCompanyName(text) {
+    return /\b(logistics|freight|transport|trucking|solutions|broker|sales|carrier|shipping|express|inc|llc|corp|co)\b/i.test(
+      text
+    );
   }
   function readSearchOriginText(doc) {
     if (!doc?.querySelector) {
@@ -11597,266 +11831,6 @@
       dtp: broker.dtp
     };
   }
-  function buildMailto(email, subject, body) {
-    const params = new URLSearchParams({ subject, body });
-    return `mailto:${email ?? ""}?${params.toString()}`;
-  }
-  function defaultOfferBody(data) {
-    return `Hello ${data.companyName || ""},
-
-I am reaching out regarding the load from ${data.origin || "Origin"} to ${data.destination || "Destination"}. Is this still available?
-
-Thank you.`;
-  }
-  function defaultBookingBody(data) {
-    return `Hello ${data.companyName || ""},
-
-I would like to discuss booking the load from ${data.origin || "Origin"} to ${data.destination || "Destination"}.
-
-Thank you.`;
-  }
-  function buildShadowTree(shadow, options = {}) {
-    const { compactColumn = false } = options;
-    const typography = readDatNativeCellTypography(document);
-    shadow.innerHTML = "";
-    const style = document.createElement("style");
-    style.textContent = buildShadowStyles(typography, compactColumn);
-    shadow.appendChild(style);
-    const card = document.createElement("section");
-    card.className = compactColumn ? "card card--grid-cell" : "card";
-    card.setAttribute("data-role", "tom-load-intelligence");
-    shadow.appendChild(card);
-    return card;
-  }
-  function buildTextEl(tag, className, text) {
-    const el = document.createElement(tag);
-    if (className) el.className = className;
-    if (text !== void 0 && text !== null) el.textContent = text;
-    return el;
-  }
-  function buildActionButton(label, options = {}) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "btn";
-    button.textContent = label;
-    if (options.variant === "ghost") {
-      button.classList.add("btn--ghost");
-    }
-    if (options.disabled) {
-      button.disabled = true;
-      button.setAttribute("aria-disabled", "true");
-    } else if (typeof options.onClick === "function") {
-      button.addEventListener("click", options.onClick);
-    }
-    if (options.dataRole) {
-      button.dataset.role = options.dataRole;
-    }
-    return button;
-  }
-  function buildMetricField(label, value, dataRole, options = {}) {
-    const { readOnly = true } = options;
-    const field = document.createElement("label");
-    field.className = "metric";
-    const labelEl = buildTextEl("span", "metric-label", label);
-    const input = document.createElement("input");
-    input.type = "text";
-    input.value = value;
-    input.readOnly = readOnly;
-    input.className = "metric-input";
-    input.dataset.role = dataRole;
-    field.append(labelEl, input);
-    return field;
-  }
-  function buildTollMetricDisplayField(label, mainValue, subtitle, dataRole) {
-    const field = document.createElement("div");
-    field.className = "metric metric--toll";
-    const labelEl = buildTextEl("span", "metric-label", label);
-    const val = buildTextEl("div", "metric-value", mainValue);
-    val.dataset.role = dataRole;
-    const sub = buildTextEl("div", "metric-toll-source", subtitle);
-    sub.dataset.role = "toll-source";
-    field.append(labelEl, val, sub);
-    return field;
-  }
-  function renderShadowCard(card, ctx) {
-    const { data, route, loadingRoute, offerTpl, bookingTpl, templateMode, shadowHost, onRefreshRoute } = ctx;
-    card.replaceChildren();
-    const roadMiles = !loadingRoute && route?.adjustedMiles !== null && route?.adjustedMiles !== void 0 && Number.isFinite(route.adjustedMiles) && route.adjustedMiles > 0 ? route.adjustedMiles : null;
-    const datTripMiles = data.tripMiles !== null && data.tripMiles !== void 0 && Number.isFinite(data.tripMiles) && data.tripMiles > 0 ? data.tripMiles : null;
-    const milesForRpm = roadMiles ?? datTripMiles;
-    const hasPostedRate = data.rateDollars !== null && data.rateDollars > 0;
-    let effectiveRate = null;
-    if (hasPostedRate) {
-      effectiveRate = data.rateDollars;
-    } else if (shadowHost) {
-      const ur = shadowHost.__datExtUserRate;
-      if (typeof ur === "number" && Number.isFinite(ur) && ur > 0) {
-        effectiveRate = ur;
-      }
-    }
-    const calculatedRpm = resolveDetailPanelRpm(effectiveRate, datTripMiles, roadMiles, data.rpmHint ?? null);
-    const offerSubject = `Offer for Load: ${data.origin || "Origin"} to ${data.destination || "Destination"}`;
-    const bookingSubject = `Booking Request: ${data.origin || "Origin"} to ${data.destination || "Destination"}`;
-    const vars = {
-      origin: data.origin || "Origin",
-      destination: data.destination || "Destination",
-      companyName: data.companyName || "",
-      contactEmail: data.contactEmail || ""
-    };
-    const offerBodyBase = interpolateEmailTemplate(offerTpl, vars) ?? defaultOfferBody(data);
-    const bookingBodyBase = interpolateEmailTemplate(bookingTpl, vars) ?? defaultBookingBody(data);
-    const offerBody = templateMode === "booking" ? bookingBodyBase : offerBodyBase;
-    const bookingBody = templateMode === "offer" ? offerBodyBase : bookingBodyBase;
-    const actions = document.createElement("div");
-    actions.className = "actions";
-    actions.append(
-      buildActionButton("Send Offer Email", {
-        disabled: !data.contactEmail,
-        dataRole: "offer-email",
-        onClick: () => {
-          window.location.href = buildMailto(data.contactEmail, offerSubject, offerBody);
-        }
-      }),
-      buildActionButton("Open Offer in Gmail", {
-        disabled: !data.contactEmail,
-        dataRole: "offer-gmail",
-        variant: "ghost",
-        onClick: () => {
-          const picked = pickGmailComposeOrMailto(data.contactEmail, offerSubject, offerBody);
-          if (picked.usedGmail) {
-            window.open(picked.href, "_blank", "noopener,noreferrer");
-          } else {
-            window.location.href = picked.href;
-          }
-        }
-      }),
-      buildActionButton("Send Booking Email", {
-        disabled: !data.contactEmail,
-        dataRole: "booking-email",
-        onClick: () => {
-          window.location.href = buildMailto(data.contactEmail, bookingSubject, bookingBody);
-        }
-      }),
-      buildActionButton("Open Booking in Gmail", {
-        disabled: !data.contactEmail,
-        dataRole: "booking-gmail",
-        variant: "ghost",
-        onClick: () => {
-          const picked = pickGmailComposeOrMailto(data.contactEmail, bookingSubject, bookingBody);
-          if (picked.usedGmail) {
-            window.open(picked.href, "_blank", "noopener,noreferrer");
-          } else {
-            window.location.href = picked.href;
-          }
-        }
-      }),
-      buildActionButton("Get Tolls", {
-        disabled: typeof onRefreshRoute !== "function" || loadingRoute,
-        dataRole: "get-tolls",
-        onClick: () => {
-          if (typeof onRefreshRoute === "function") {
-            onRefreshRoute();
-          }
-        }
-      })
-    );
-    const rpmField = buildMetricField("RPM $", formatOptionalRpm(calculatedRpm), "rpm");
-    const rateDisplay = hasPostedRate ? formatMoney(data.rateDollars) : formatUserRateInputValue(shadowHost?.__datExtUserRate);
-    const rateField = buildMetricField("RATE $", rateDisplay, "rate", { readOnly: hasPostedRate });
-    const milesField = buildMetricField("MILES", formatOptionalMiles(milesForRpm, loadingRoute), "miles");
-    const tollField = buildTollMetricDisplayField(
-      "TOLL EST",
-      tollMainLineDisplay(route?.tollStatus, route?.tollSource, loadingRoute),
-      formatTollSourceSubtitle(route, loadingRoute),
-      "toll"
-    );
-    const metricsCluster = document.createElement("div");
-    metricsCluster.className = "metrics-row";
-    metricsCluster.append(rpmField, rateField, milesField, tollField);
-    const top = document.createElement("div");
-    top.className = "panel-header";
-    top.append(buildTextEl("span", "title", "Load Intelligence"), actions);
-    card.append(top, metricsCluster);
-    if (!hasPostedRate && shadowHost) {
-      const rateInput = rateField.querySelector("input");
-      if (rateInput instanceof HTMLInputElement) {
-        rateInput.placeholder = "Total $";
-        rateInput.addEventListener("input", () => {
-          const raw = rateInput.value.replace(/,/g, "").trim();
-          const num = Number.parseFloat(raw);
-          shadowHost.__datExtUserRate = Number.isFinite(num) && num > 0 ? num : null;
-          const miles = shadowHost.__datExtRouteData?.adjustedMiles ?? data.tripMiles;
-          const mr = typeof miles === "number" && Number.isFinite(miles) && miles > 0 ? miles : null;
-          const eff = shadowHost.__datExtUserRate;
-          const rpmInput = metricsCluster.querySelector('[data-role="rpm"]');
-          if (rpmInput instanceof HTMLInputElement) {
-            rpmInput.value = mr && eff ? formatRpm(eff / mr) : "--";
-          }
-        });
-      }
-    }
-    const mapWrap = document.createElement("div");
-    mapWrap.className = "map-wrap";
-    const mapCanvas = document.createElement("div");
-    mapCanvas.className = "map-canvas";
-    mapCanvas.dataset.role = "lane-map";
-    mapWrap.appendChild(mapCanvas);
-    card.appendChild(mapWrap);
-    const lineLatLngs = Array.isArray(route?.mapLineLatLngs) ? route.mapLineLatLngs : null;
-    if (lineLatLngs && lineLatLngs.length >= 2) {
-      ctx.mapInstance = mountLaneMap(mapCanvas, lineLatLngs, {
-        pickupLatLng: Array.isArray(route?.pickupMapLatLng) ? route.pickupMapLatLng : null,
-        deliveryLatLng: Array.isArray(route?.deliveryMapLatLng) ? route.deliveryMapLatLng : null
-      });
-    } else {
-      ctx.mapInstance = null;
-    }
-    if (!ctx.mapInstance) {
-      mapCanvas.textContent = loadingRoute ? "Loading route map..." : "Route map unavailable";
-    }
-    const notes = document.createElement("div");
-    notes.className = "notes";
-    const routeSource = String(route?.routeSource || (loadingRoute ? "Loading route..." : "Unavailable"));
-    notes.appendChild(buildTextEl("div", "", `Route source: ${routeSource}`));
-    if (route?.routeConfidence) {
-      notes.appendChild(buildTextEl("div", "", `Confidence: ${String(route.routeConfidence)}`));
-    }
-    const firstNote = Array.isArray(route?.notes) ? route.notes[0] : "";
-    if (firstNote) {
-      notes.appendChild(buildTextEl("div", "", String(firstNote)));
-    }
-    card.appendChild(notes);
-  }
-  function buildAssistRowWrapper(mode) {
-    if (mode === "column-before") {
-      const column2 = document.createElement("div");
-      column2.className = `details-column ${TOM_COLUMN_CLASS} dat-ext-injected`;
-      column2.style.display = "flex";
-      column2.style.flexDirection = "column";
-      column2.style.justifyContent = "center";
-      column2.style.flex = "1 1 0";
-      column2.style.minWidth = "0";
-      const host2 = document.createElement("section");
-      host2.className = TOM_PANEL_CLASS;
-      host2.dataset[TOM_HOST_DATASET] = "1";
-      host2.attachShadow({ mode: "open" });
-      buildShadowTree(host2.shadowRoot, { compactColumn: true });
-      column2.appendChild(host2);
-      return { wrapper: column2, host: host2 };
-    }
-    const row = document.createElement("div");
-    row.className = `table-details-row row-spacing ${TOM_ROW_CLASS} dat-ext-injected`;
-    const column = document.createElement("div");
-    column.className = `details-column ${TOM_COLUMN_CLASS}`;
-    row.appendChild(column);
-    const host = document.createElement("section");
-    host.className = TOM_PANEL_CLASS;
-    host.dataset[TOM_HOST_DATASET] = "1";
-    host.attachShadow({ mode: "open" });
-    buildShadowTree(host.shadowRoot, { compactColumn: false });
-    column.appendChild(host);
-    return { wrapper: row, host };
-  }
   function teardownDetailUi(detailHost) {
     if (!(detailHost instanceof HTMLElement)) return;
     removeAllTomRows(detailHost);
@@ -11894,7 +11868,7 @@ Thank you.`;
     }
     if (!existing) {
       teardownDetailUi(detailHost);
-      const { wrapper } = buildAssistRowWrapper(mode);
+      const { wrapper } = buildAssistRowWrapper(mode, document);
       parent.insertBefore(wrapper, before);
       existing = wrapper;
     }
@@ -11924,7 +11898,7 @@ Thank you.`;
       onRefreshRoute,
       mapInstance: null
     };
-    renderShadowCard(card, ctx);
+    renderColumn(card, ctx);
     host.__datExtMap = ctx.mapInstance ?? null;
   }
   function enhanceLoadDetails(doc, context) {
@@ -12507,8 +12481,44 @@ Thank you.`;
     }
     return score;
   }
+  function resolveGridSurfaceFromScope(scope) {
+    if (!(scope instanceof HTMLElement)) {
+      return null;
+    }
+    if (scope instanceof HTMLTableElement) {
+      return scope;
+    }
+    const role = scope.getAttribute("role");
+    if (role === "grid" || role === "treegrid") {
+      return scope;
+    }
+    const tableAncestor = scope.closest("table");
+    if (tableAncestor instanceof HTMLTableElement) {
+      return tableAncestor;
+    }
+    const gridAncestor = scope.closest('[role="grid"], [role="treegrid"]');
+    if (gridAncestor instanceof HTMLElement) {
+      return gridAncestor;
+    }
+    return null;
+  }
   function findResultsGrid(doc, options = {}) {
     const { scope = null, allowDocumentDeepScan = true } = options;
+    if (scope instanceof HTMLElement) {
+      const direct = resolveGridSurfaceFromScope(scope);
+      if (direct) {
+        const score = direct instanceof HTMLTableElement ? scoreLoadsTable(direct) : scoreAriaGrid(
+          /** @type {HTMLElement} */
+          direct
+        );
+        if (score >= 4) {
+          return direct;
+        }
+        if (direct !== scope && direct.contains(scope)) {
+          return direct;
+        }
+      }
+    }
     const roots = [];
     if (scope instanceof HTMLElement) {
       roots.push(scope);
@@ -13131,18 +13141,19 @@ Thank you.`;
         if (state.cachedViewport && !state.cachedViewport.isConnected) {
           state.cachedViewport = null;
         }
+        const allowFullDocumentScan = allowDocumentDeepScan || state.cachedViewport === null;
         const targets = state.appliedTargets;
         const scanOptions = {
           onlyMatches: false,
           scanScope,
-          allowDocumentDeepScan,
+          allowDocumentDeepScan: allowFullDocumentScan,
           cachedViewport: state.cachedViewport
         };
         injectHeaderTools();
         if (!state.cachedViewport) {
           state.cachedViewport = findDatOneViewport(document, {
             scope: scanScope,
-            allowDocumentDeepScan
+            allowDocumentDeepScan: allowFullDocumentScan
           });
         }
         const result = scanDocumentForGrids(document, targets, {

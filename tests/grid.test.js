@@ -94,6 +94,21 @@ describe("findResultsGrid & scoring", () => {
   });
 });
 
+describe("findResultsGrid scope resolution", () => {
+  it("finds the grid from a row-container via closest()", () => {
+    document.body.innerHTML = `
+      <div role="grid" id="grid-host">
+        <div class="row-container" id="row">
+          <div role="gridcell">Allentown, PA</div>
+        </div>
+      </div>
+    `;
+    const row = document.getElementById("row");
+    const grid = findResultsGrid(document, { scope: row, allowDocumentDeepScan: false });
+    expect(grid?.id).toBe("grid-host");
+  });
+});
+
 describe("scanDocumentForGrids", () => {
   it("processes the strongest loads table when multiples exist", () => {
     buildFixtureTable();

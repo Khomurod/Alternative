@@ -280,11 +280,12 @@ function scheduleScan(immediate) {
         state.cachedViewport = null;
       }
 
+      const allowFullDocumentScan = allowDocumentDeepScan || state.cachedViewport === null;
       const targets = state.appliedTargets;
       const scanOptions = {
         onlyMatches: false,
         scanScope,
-        allowDocumentDeepScan,
+        allowDocumentDeepScan: allowFullDocumentScan,
         cachedViewport: state.cachedViewport
       };
 
@@ -293,7 +294,7 @@ function scheduleScan(immediate) {
       if (!state.cachedViewport) {
         state.cachedViewport = findDatOneViewport(document, {
           scope: scanScope,
-          allowDocumentDeepScan
+          allowDocumentDeepScan: allowFullDocumentScan
         });
       }
 

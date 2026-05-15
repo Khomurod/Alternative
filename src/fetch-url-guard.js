@@ -5,7 +5,8 @@ export const ALLOWED_FETCH_HOSTNAMES = [
   "routes.googleapis.com",
   "photon.komoot.io",
   "router.project-osrm.org",
-  "nominatim.openstreetmap.org"
+  "nominatim.openstreetmap.org",
+  "tile.openstreetmap.org"
 ];
 
 const ALLOWED_HOSTNAME_SET = new Set(ALLOWED_FETCH_HOSTNAMES);
