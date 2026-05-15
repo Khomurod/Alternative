@@ -66,6 +66,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === "dat-ext:gmail-recent-messages") {
+    handleGmailRecentMessages(message)
+      .then((result) => sendResponse(result))
+      .catch((error) => {
+        const msg = String(error?.message || error || "Gmail recent messages failed");
+        if (isOAuthCancelled(msg)) {
+          sendResponse({ ok: false, cancelled: true, error: msg });
+          return;
+        }
+        sendResponse({ ok: false, error: msg });
+      });
+    return true;
+  }
+
   if (message?.type === "dat-ext:test-tollguru") {
     handleTestTollguru(message)
       .then((result) => sendResponse({ ok: true, ...result }))
@@ -298,6 +312,86 @@ async function handleGmailThreadsList(message) {
       : undefined;
 
   return { ok: true, threads, ...(estimate !== undefined ? { resultSizeEstimate: estimate } : {}) };
+}
+
+/**
+ * @param {*} msg
+ * @param {string} headerName
+ * @returns {string}
+ */
+function getGmailMessageHeader(msg, headerName) {
+  const headers = msg?.payload?.headers;
+  if (!Array.isArray(headers)) {
+    return "";
+  }
+  const needle = String(headerName || "").trim().toLowerCase();
+  const hit = headers.find((h) => String(h?.name || "").trim().toLowerCase() === needle);
+  return typeof hit?.value === "string" ? hit.value.trim() : "";
+}
+
+/**
+ * @typedef {{ id: string, subject: string, from: string, snippet: string, threadId?: string, internalDate?: string }} GmailRecentUiMessage
+ */
+
+/**
+ * @param {*} message
+ * @returns {Promise<{ ok: true, messages: GmailRecentUiMessage[] }>}
+ */
+async function handleGmailRecentMessages(message) {
+  const contactEmail = String(message?.contactEmail || "")
+    .trim()
+    .slice(0, 254);
+  let q = String(message?.query || "").trim();
+
+  if (!q) {
+    q = contactEmail ? `(from:${contactEmail} OR to:${contactEmail})` : "in:inbox newer_than:14d";
+  }
+
+  const listParams = new URLSearchParams({
+    maxResults: "5",
+    includeSpamTrash: "false",
+    q
+  });
+
+  const listed = await gmailAuthenticatedJson("GET", `users/me/messages?${listParams.toString()}`);
+  const refs = Array.isArray(listed?.messages) ? listed.messages : [];
+  const ids = refs
+    .map((m) => String(m?.id || "").trim())
+    .filter(Boolean)
+    .slice(0, 5);
+
+  const metaHeaderNames = ["Subject", "From", "To", "Date"];
+  /** @type {GmailRecentUiMessage[]} */
+  const out = [];
+
+  for (const id of ids) {
+    const mh = new URLSearchParams({ format: "metadata" });
+    for (const h of metaHeaderNames) {
+      mh.append("metadataHeaders", h);
+    }
+    const meta = await gmailAuthenticatedJson(
+      "GET",
+      `users/me/messages/${encodeURIComponent(id)}?${mh.toString()}`
+    );
+    const subject = getGmailMessageHeader(meta, "Subject").slice(0, 240) || "(No subject)";
+    const from = getGmailMessageHeader(meta, "From").slice(0, 220);
+    const snippet = String(meta?.snippet || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 280);
+    const threadId = typeof meta?.threadId === "string" ? meta.threadId : undefined;
+    const internalDate = typeof meta?.internalDate === "string" ? meta.internalDate : undefined;
+    out.push({
+      id,
+      subject,
+      from,
+      snippet,
+      ...(threadId ? { threadId } : {}),
+      ...(internalDate ? { internalDate } : {})
+    });
+  }
+
+  return { ok: true, messages: out };
 }
 
 /**

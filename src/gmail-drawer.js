@@ -1,4 +1,9 @@
-/** Right-side Gmail drawer (Shadow DOM). Gmail REST calls go through `background.js` via chrome.runtime.sendMessage. */
+/** Gmail side rail (Shadow DOM): fixed right column; `body.dat-ext-drawer-open` reserves width in [styles.css]. */
+
+const DRAWER_HOST_ID = "dat-ext-gmail-drawer";
+const BODY_PUSH_CLASS = "dat-ext-drawer-open";
+const HOST_OPEN_CLASS = "dat-ext-gmail-drawer--open";
+const TRANSITION_MS = 300;
 
 /** @typedef {{ onRequestGoogleLogin?: (() => void) | null }} DrawerConfig */
 
@@ -28,61 +33,43 @@ let rootHost = /** @type {HTMLElement | null} */ (null);
 /** @type {ShadowRoot | null} */
 let shadowRootRef = /** @type {ShadowRoot | null} */ (null);
 /** @type {HTMLElement | null} */
-let panelEl = /** @type {HTMLElement | null} */ (null);
+let railEl = /** @type {HTMLElement | null} */ (null);
 
-/** @type {(() => void) | null} */
-let releaseTrap = null;
-
-/** @type {HTMLElement | null} */
-let lastFocus = null;
+/** @type {ReturnType<typeof setTimeout> | null} */
+let closeBodyTimer = null;
 
 function buildDrawerStyles() {
   return `
-  :host { all: initial; }
-  *, *::before, *::after { box-sizing: border-box; }
-  .layer {
+  :host {
+    all: initial;
+    display: block;
     position: fixed;
-    inset: 0;
-    z-index: 2147483000;
+    right: 0;
+    top: 0;
+    height: 100vh;
+    width: var(--dat-ext-gmail-drawer-width, 320px);
+    z-index: 99999;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
     pointer-events: none;
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     font-size: 13px;
     color: #101828;
+    box-sizing: border-box;
   }
-  .layer.open { pointer-events: auto; }
-  .backdrop {
-    position: absolute;
-    inset: 0;
-    border: none;
-    padding: 0;
-    margin: 0;
-    width: 100%;
+  *, *::before, *::after { box-sizing: border-box; }
+  :host(.${HOST_OPEN_CLASS}) {
+    transform: translateX(0);
+    pointer-events: auto;
+  }
+  .rail {
     height: 100%;
-    display: block;
-    background: rgba(15, 23, 42, 0.38);
-    backdrop-filter: blur(2px);
-    opacity: 0;
-    transition: opacity 0.2s ease-out;
-    cursor: pointer;
-  }
-  .layer.open .backdrop { opacity: 1; }
-  .panel {
-    position: absolute;
-    top: 0;
-    right: 0;
-    height: 100vh;
-    width: clamp(320px, 42vw, 440px);
-    max-width: 100vw;
-    background: #fff;
-    box-shadow: -8px 0 32px rgba(15, 23, 42, 0.14);
     display: flex;
     flex-direction: column;
-    transform: translateX(100%);
-    transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
-    outline: none;
-  }
-  .layer.open .panel {
-    transform: translateX(0);
+    background: #fff;
+    box-shadow: -8px 0 28px rgba(15, 23, 42, 0.12);
+    border-left: 1px solid #e4e7ec;
+    min-height: 0;
   }
   .hdr {
     flex: 0 0 auto;
@@ -124,14 +111,25 @@ function buildDrawerStyles() {
     justify-content: center;
   }
   .btn-icon:hover { background: #eef2ff; color: #0b66ff; }
-  .scroll {
+  .compose {
+    flex: 0 1 auto;
+    overflow: auto;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 52vh;
+    min-height: 0;
+    border-bottom: 1px solid #eaecf0;
+  }
+  .inbox {
     flex: 1 1 auto;
+    min-height: 0;
     overflow: auto;
     padding: 12px 14px 18px;
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    min-height: 0;
+    gap: 10px;
   }
   .chips {
     display: flex;
@@ -170,9 +168,10 @@ function buildDrawerStyles() {
     width: 100%;
   }
   textarea.inp {
-    min-height: 140px;
+    min-height: 100px;
     resize: vertical;
     line-height: 1.45;
+    max-height: 200px;
   }
   input.inp:focus, textarea.inp:focus {
     outline: none;
@@ -214,7 +213,7 @@ function buildDrawerStyles() {
     font-size: 12px;
     font-weight: 700;
     color: #475467;
-    margin: 4px 0 2px;
+    margin: 0;
   }
   .thread-list {
     display: flex;
@@ -231,22 +230,32 @@ function buildDrawerStyles() {
     background: #fbfcfe;
     cursor: default;
   }
+  .thread-subj {
+    font-size: 12px;
+    font-weight: 700;
+    color: #101828;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .thread-from {
+    font-size: 11px;
+    font-weight: 600;
+    color: #60708a;
+    margin-top: 4px;
+    word-break: break-word;
+  }
   .thread-snippet {
     font-size: 12px;
     color: #344054;
     line-height: 1.35;
-    margin-top: 4px;
+    margin-top: 6px;
     display: -webkit-box;
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
-  }
-  .thread-id {
-    font-size: 10px;
-    font-weight: 700;
-    color: #98a2b3;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
   }
   .status {
     font-size: 12px;
@@ -275,42 +284,30 @@ function buildDrawerStyles() {
 }
 
 function ensureDrawerDom() {
-  if (rootHost?.isConnected && shadowRootRef && panelEl) {
+  if (rootHost?.isConnected && shadowRootRef && railEl) {
     return;
   }
 
-  rootHost = document.createElement("div");
-  rootHost.id = "dat-ext-gmail-drawer-host";
-  rootHost.setAttribute("data-dat-ext-gmail-drawer", "1");
+  rootHost = document.createElement("aside");
+  rootHost.id = DRAWER_HOST_ID;
+  rootHost.setAttribute("role", "complementary");
+  rootHost.setAttribute("aria-label", "Gmail compose and recent emails");
   shadowRootRef = rootHost.attachShadow({ mode: "open" });
 
   const style = document.createElement("style");
   style.textContent = buildDrawerStyles();
 
-  const layer = document.createElement("div");
-  layer.className = "layer";
-
-  const backdropEl = document.createElement("button");
-  backdropEl.type = "button";
-  backdropEl.className = "backdrop";
-  backdropEl.setAttribute("aria-label", "Close inbox drawer");
-
-  panelEl = document.createElement("div");
-  panelEl.className = "panel";
-  panelEl.setAttribute("role", "dialog");
-  panelEl.setAttribute("aria-modal", "true");
-  panelEl.setAttribute("aria-labelledby", "dat-ext-gmail-drawer-title");
-  panelEl.tabIndex = -1;
-
-  panelEl.innerHTML = `
+  railEl = document.createElement("div");
+  railEl.className = "rail";
+  railEl.innerHTML = `
     <div class="hdr">
       <div>
         <h2 id="dat-ext-gmail-drawer-title">Gmail</h2>
         <div class="hdr-meta" data-part="subtitle"></div>
       </div>
-      <button type="button" class="btn-icon" data-action="close" aria-label="Close">×</button>
+      <button type="button" class="btn-icon" data-action="close" aria-label="Close Gmail panel">×</button>
     </div>
-    <div class="scroll">
+    <div class="compose">
       <div class="status" data-part="status" role="status" aria-live="polite"></div>
       <div class="chips" data-part="chips"></div>
       <label class="lbl">To
@@ -326,115 +323,61 @@ function ensureDrawerDom() {
         <button type="button" class="btn-primary" data-action="send">Send email</button>
         <button type="button" class="btn-ghost" data-action="signin">Sign in with Google</button>
       </div>
-      <div class="threads-h">Recent threads</div>
+    </div>
+    <div class="inbox">
+      <div class="threads-h">Recent emails</div>
       <div class="loading" data-part="threads-loading">Loading…</div>
       <ul class="thread-list" data-part="threads" hidden></ul>
     </div>
   `;
 
-  layer.append(backdropEl, panelEl);
-  shadowRootRef.append(style, layer);
+  shadowRootRef.append(style, railEl);
 
+  rootHost.dataset.datExtDrawer = "rail";
   document.body.appendChild(rootHost);
 
-  backdropEl.addEventListener("click", () => closeDatExtGmailDrawer());
-  panelEl.querySelector('[data-action="close"]')?.addEventListener("click", () => closeDatExtGmailDrawer());
-  panelEl.querySelector('[data-action="signin"]')?.addEventListener("click", () => {
+  railEl.querySelector('[data-action="close"]')?.addEventListener("click", () => closeDatExtGmailDrawer());
+  railEl.querySelector('[data-action="signin"]')?.addEventListener("click", () => {
     drawerConfig.onRequestGoogleLogin?.();
   });
 }
 
-function getLayer() {
-  return shadowRootRef?.querySelector(".layer") ?? null;
-}
-
 function getRefs() {
-  const panel = panelEl;
-  if (!panel) {
+  const rail = railEl;
+  if (!rail) {
     return {};
   }
   return {
-    subtitle: panel.querySelector('[data-part="subtitle"]'),
-    chips: panel.querySelector('[data-part="chips"]'),
-    status: panel.querySelector('[data-part="status"]'),
-    threadsLoading: panel.querySelector('[data-part="threads-loading"]'),
-    threadsUl: panel.querySelector('[data-part="threads"]'),
-    to: panel.querySelector('[data-field="to"]'),
-    subject: panel.querySelector('[data-field="subject"]'),
-    body: panel.querySelector('[data-field="body"]'),
-    sendBtn: panel.querySelector('[data-action="send"]')
+    subtitle: rail.querySelector('[data-part="subtitle"]'),
+    chips: rail.querySelector('[data-part="chips"]'),
+    status: rail.querySelector('[data-part="status"]'),
+    threadsLoading: rail.querySelector('[data-part="threads-loading"]'),
+    threadsUl: rail.querySelector('[data-part="threads"]'),
+    to: rail.querySelector('[data-field="to"]'),
+    subject: rail.querySelector('[data-field="subject"]'),
+    body: rail.querySelector('[data-field="body"]'),
+    sendBtn: rail.querySelector('[data-action="send"]')
   };
 }
 
 export function closeDatExtGmailDrawer() {
   document.removeEventListener("keydown", onEscapeDocument);
+  rootHost?.classList.remove(HOST_OPEN_CLASS);
 
-  const layer = getLayer();
-  layer?.classList.remove("open");
-
-  releaseTrap?.();
-  releaseTrap = null;
-
-  window.setTimeout(() => {
-    if (layer && !layer.classList.contains("open") && rootHost) {
-      rootHost.style.visibility = "hidden";
-    }
-  }, 280);
-
-  if (lastFocus instanceof HTMLElement && document.body.contains(lastFocus)) {
-    lastFocus.focus({ preventScroll: true });
+  if (closeBodyTimer) {
+    clearTimeout(closeBodyTimer);
+    closeBodyTimer = null;
   }
-  lastFocus = null;
+  closeBodyTimer = window.setTimeout(() => {
+    document.body.classList.remove(BODY_PUSH_CLASS);
+    closeBodyTimer = null;
+  }, TRANSITION_MS);
 }
 
 function onEscapeDocument(e) {
   if (e.key === "Escape") {
     closeDatExtGmailDrawer();
   }
-}
-
-/**
- * @param {HTMLElement} panel
- */
-function attachFocusTrap(panel) {
-  const selector =
-    'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
-  /** @returns {HTMLElement[]} */
-  function focusables() {
-    return [...panel.querySelectorAll(selector)].filter(
-      (el) =>
-        el instanceof HTMLElement &&
-        !el.hasAttribute("disabled") &&
-        el.tabIndex !== -1 &&
-        !el.hidden &&
-        (el.offsetParent !== null || el === document.activeElement)
-    );
-  }
-  /** @param {KeyboardEvent} e */
-  function onKeyDown(e) {
-    if (e.key !== "Tab") {
-      return;
-    }
-    const list = focusables();
-    if (!list.length) {
-      return;
-    }
-    const first = list[0];
-    const last = list[list.length - 1];
-    const ae = document.activeElement;
-    const activeInside = ae instanceof HTMLElement && panel.contains(ae);
-    if (e.shiftKey) {
-      if (!activeInside || ae === first) {
-        e.preventDefault();
-        last.focus();
-      }
-    } else if (!activeInside || ae === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  }
-  panel.addEventListener("keydown", onKeyDown);
-  return () => panel.removeEventListener("keydown", onKeyDown);
 }
 
 function hideStatus() {
@@ -527,7 +470,7 @@ function sendGmailFromDrawer(to, subject, body) {
   });
 }
 
-function fetchThreads(contactEmail) {
+function fetchRecentMessages(contactEmail) {
   return new Promise((resolve, reject) => {
     const rt = globalThis.chrome?.runtime;
     if (!rt?.sendMessage) {
@@ -535,18 +478,18 @@ function fetchThreads(contactEmail) {
       return;
     }
     rt.sendMessage(
-      { type: "dat-ext:gmail-threads-list", contactEmail: String(contactEmail || "").trim(), maxResults: 10 },
+      { type: "dat-ext:gmail-recent-messages", contactEmail: String(contactEmail || "").trim() },
       (response) => {
         const last = typeof chrome !== "undefined" ? chrome.runtime?.lastError : undefined;
         if (last) {
-          reject(new Error(last.message || "Threads failed."));
+          reject(new Error(last.message || "Recent messages failed."));
           return;
         }
         if (!response?.ok) {
-          reject(new Error(response?.error || "Threads failed."));
+          reject(new Error(response?.error || "Recent messages failed."));
           return;
         }
-        resolve(Array.isArray(response.threads) ? response.threads : []);
+        resolve(Array.isArray(response.messages) ? response.messages : []);
       }
     );
   });
@@ -555,41 +498,46 @@ function fetchThreads(contactEmail) {
 /**
  * @param {string} contactEmail
  */
-async function loadThreadsIntoDrawer(contactEmail) {
+async function loadRecentIntoDrawer(contactEmail) {
   const refs = getRefs();
   if (!refs.threadsLoading || !refs.threadsUl) {
     return;
   }
   refs.threadsLoading.hidden = false;
-  refs.threadsLoading.textContent = "Loading threads…";
+  refs.threadsLoading.textContent = "Loading recent emails…";
   refs.threadsUl.hidden = true;
   refs.threadsUl.replaceChildren();
   try {
-    const threads = /** @type {{ id: string, snippet: string }[]} */ (await fetchThreads(contactEmail));
-    refs.threadsLoading.hidden = threads.length === 0;
-    refs.threadsUl.hidden = threads.length === 0;
-    if (!threads.length) {
-      refs.threadsLoading.textContent = "No recent threads match this contact.";
+    const messages = /** @type {{ id: string, subject: string, from: string, snippet: string }[]} */ (
+      await fetchRecentMessages(contactEmail)
+    );
+    refs.threadsLoading.hidden = messages.length === 0;
+    refs.threadsUl.hidden = messages.length === 0;
+    if (!messages.length) {
+      refs.threadsLoading.textContent = "No recent messages match this search.";
       return;
     }
     refs.threadsLoading.hidden = true;
-    for (const t of threads) {
+    for (const m of messages) {
       const li = document.createElement("li");
       li.className = "thread-li";
-      const idEl = document.createElement("div");
-      idEl.className = "thread-id";
-      idEl.textContent = "Conversation";
+      const subj = document.createElement("div");
+      subj.className = "thread-subj";
+      subj.textContent = m.subject || "(No subject)";
+      const from = document.createElement("div");
+      from.className = "thread-from";
+      from.textContent = m.from || "";
       const sn = document.createElement("div");
       sn.className = "thread-snippet";
-      sn.textContent = t.snippet || "(No preview)";
-      li.append(idEl, sn);
+      sn.textContent = m.snippet || "(No preview)";
+      li.append(subj, from, sn);
       refs.threadsUl.appendChild(li);
     }
   } catch (e) {
     refs.threadsLoading.hidden = false;
     refs.threadsUl.hidden = true;
     refs.threadsLoading.textContent = String(
-      /** @type {{ message?: string }} */ (e)?.message || e || "Could not load threads."
+      /** @type {{ message?: string }} */ (e)?.message || e || "Could not load recent emails."
     );
   }
 }
@@ -600,16 +548,25 @@ async function loadThreadsIntoDrawer(contactEmail) {
 export function openDatExtGmailDrawer(payload) {
   ensureDrawerDom();
 
-  lastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  if (closeBodyTimer) {
+    clearTimeout(closeBodyTimer);
+    closeBodyTimer = null;
+  }
 
   const refs = getRefs();
-  const layer = getLayer();
-  if (!layer || !refs.to || !refs.subject || !refs.body || !refs.sendBtn || !panelEl) {
+  if (!rootHost || !refs.to || !refs.subject || !refs.body || !refs.sendBtn || !railEl) {
     return;
   }
 
-  rootHost.style.visibility = "visible";
-  layer.classList.add("open");
+  document.body.classList.add(BODY_PUSH_CLASS);
+  document.removeEventListener("keydown", onEscapeDocument);
+  document.addEventListener("keydown", onEscapeDocument);
+
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      rootHost?.classList.add(HOST_OPEN_CLASS);
+    });
+  });
 
   hideStatus();
   refs.chips.replaceChildren();
@@ -635,16 +592,6 @@ export function openDatExtGmailDrawer(payload) {
     refs.subtitle.textContent = `${modeLabel}${payload.userAccountEmail ? ` · ${payload.userAccountEmail}` : ""}`;
   }
 
-  document.removeEventListener("keydown", onEscapeDocument);
-  document.addEventListener("keydown", onEscapeDocument);
-
-  releaseTrap?.();
-  releaseTrap = attachFocusTrap(panelEl);
-
-  window.requestAnimationFrame(() => {
-    refs.subject?.focus();
-  });
-
   refs.sendBtn.onclick = async () => {
     hideStatus();
     refs.sendBtn.disabled = true;
@@ -652,7 +599,7 @@ export function openDatExtGmailDrawer(payload) {
       await sendGmailFromDrawer(refs.to.value, refs.subject.value, refs.body.value);
       showStatus("Email sent.", false);
       notifyTomPanelToast(payload.shadowHost, "Email sent.", "success");
-      await loadThreadsIntoDrawer(payload.contactEmail);
+      await loadRecentIntoDrawer(payload.contactEmail);
     } catch (err) {
       const msg = String(
         /** @type {{ message?: string }} */ (err)?.message || err || "Send failed."
@@ -664,5 +611,5 @@ export function openDatExtGmailDrawer(payload) {
     }
   };
 
-  void loadThreadsIntoDrawer(payload.contactEmail);
+  void loadRecentIntoDrawer(payload.contactEmail);
 }

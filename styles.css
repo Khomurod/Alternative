@@ -1,5 +1,15 @@
 :root {
   --dat-ext-toolbar-max-width: 420px;
+  /* Gmail side rail — must match [src/gmail-drawer.js] host width */
+  --dat-ext-gmail-drawer-width: 320px;
+}
+
+/**
+ * Push DAT viewport left when Gmail drawer is open (side-by-side; no fullscreen modal).
+ */
+body.dat-ext-drawer-open {
+  padding-right: var(--dat-ext-gmail-drawer-width) !important;
+  box-sizing: border-box;
 }
 
 #my-ext-compact-tools {
