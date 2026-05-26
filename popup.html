@@ -206,17 +206,14 @@
       <pre id="booking-preview" aria-live="polite"></pre>
     </div>
     <p class="hint tpl-snapshot-note">
-      By default, your Gmail body is exactly your template text. Enable the checkbox below to include a short load summary (origin, miles, RPM, etc.) above your template.
+      Unchecked (recommended): Gmail body is only your template text. Check the box below to add a load summary above your template.
     </p>
+    <label class="row" style="margin-top: 12px">
+      <input type="checkbox" id="email-include-snapshot" />
+      <span>Include load summary above email body</span>
+    </label>
+    <p class="hint small">Adds Origin, Destination, RPM, Miles, Rate, and Toll before your template when enabled.</p>
     <button id="save" type="button">Save templates</button>
-
-    <div class="feature-block">
-      <label class="row">
-        <input type="checkbox" id="email-include-snapshot" />
-        <span>Include load summary above email body</span>
-      </label>
-      <p class="hint small">Default OFF: Gmail body matches your saved template exactly.</p>
-    </div>
 
     <div class="feature-block">
       <label class="row">

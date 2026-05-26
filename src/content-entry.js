@@ -100,7 +100,6 @@ function bootstrap() {
 
 function start() {
   state.appliedTargets = parseTargetsFromPrefs(readStoredPrefs());
-  loadEmailTemplatesFromStorage();
   loadEmailUiStateFromStorage();
   attachEmailTemplateListener();
   attachNumeoColumnPreferenceListener();
@@ -108,12 +107,15 @@ function start() {
   attachUserAccountEmailListener();
   attachRouteIconDirectionsListener();
   attachRowSummaryDirectionsListener();
-  startObserver();
-  scheduleScan(true);
 
-  if (!String(state.userAccountEmail || "").trim()) {
-    maybeSilentGoogleSessionSync();
-  }
+  loadEmailTemplatesFromStorage(() => {
+    startObserver();
+    scheduleScan(true);
+
+    if (!String(state.userAccountEmail || "").trim()) {
+      maybeSilentGoogleSessionSync();
+    }
+  });
 }
 
 function applyTollguruSkipPolylineFromRecord(record) {
@@ -227,8 +229,12 @@ function attachNumeoColumnPreferenceListener() {
   });
 }
 
-function loadEmailTemplatesFromStorage() {
+/**
+ * @param {() => void} [onReady]
+ */
+function loadEmailTemplatesFromStorage(onReady) {
   if (!globalThis.chrome?.storage?.local?.get) {
+    onReady?.();
     return;
   }
 
@@ -236,7 +242,7 @@ function loadEmailTemplatesFromStorage() {
     state.emailOfferTemplate = r[EMAIL_OFFER_TEMPLATE_KEY] ?? "";
     state.emailBookingTemplate = r[EMAIL_BOOKING_TEMPLATE_KEY] ?? "";
     state.emailIncludeSnapshot = r[DAT_EXT_EMAIL_INCLUDE_SNAPSHOT_KEY] === true;
-    scheduleScan(true);
+    onReady?.();
   });
 }
 

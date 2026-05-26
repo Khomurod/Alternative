@@ -11919,6 +11919,12 @@
     });
   }
 
+  // src/email-settings.js
+  var DAT_EXT_EMAIL_INCLUDE_SNAPSHOT_KEY = "datExtEmailIncludeSnapshot";
+  function defaultEmailIncludeSnapshotEnabled() {
+    return false;
+  }
+
   // src/email-template.js
   var EMAIL_OFFER_TEMPLATE_KEY = "dat-ext-email-offer-template-v1";
   var EMAIL_BOOKING_TEMPLATE_KEY = "dat-ext-email-booking-template-v1";
@@ -12452,6 +12458,42 @@ Thank you.`;
       `Toll: ${tollDisplayText}`
     ].join("\n");
   }
+  function composeEmailBody(templateBody, includeSnapshot, snapshotText) {
+    const body = String(templateBody ?? "").trim();
+    if (!includeSnapshot) {
+      return body;
+    }
+    const snapshot = String(snapshotText ?? "").trim();
+    if (!snapshot) {
+      return body;
+    }
+    return `${snapshot}
+
+${body}`.trim();
+  }
+  function readEmailIncludeSnapshot(callback) {
+    const storage = globalThis.chrome?.storage?.local;
+    if (!storage?.get) {
+      callback(false);
+      return;
+    }
+    storage.get([DAT_EXT_EMAIL_INCLUDE_SNAPSHOT_KEY], (record) => {
+      callback(record[DAT_EXT_EMAIL_INCLUDE_SNAPSHOT_KEY] === true);
+    });
+  }
+  function withComposedEmailBody(templateBody, snapshotCtx, run) {
+    readEmailIncludeSnapshot((includeSnapshot) => {
+      const snapshot = buildLoadSnapshotForEmail(
+        snapshotCtx.data,
+        snapshotCtx.calculatedRpm,
+        snapshotCtx.milesForRpm,
+        snapshotCtx.loadingRoute,
+        snapshotCtx.rateLabel,
+        snapshotCtx.tollLine
+      );
+      run(composeEmailBody(templateBody, includeSnapshot, snapshot));
+    });
+  }
   function defaultOfferBody(data) {
     return interpolateEmailTemplate(DEFAULT_OFFER_EMAIL_TEMPLATE, {
       origin: data.origin || "Origin",
@@ -12553,7 +12595,6 @@ Thank you.`;
       templateMode,
       shadowHost,
       onRefreshRoute,
-      emailIncludeSnapshot = false,
       userAccountEmail = "",
       onRequestGoogleLogin = null,
       tollguruApiKey = ""
@@ -12589,13 +12630,7 @@ Thank you.`;
     const bookingBody = templateMode === "offer" ? offerBodyBase : bookingBodyBase;
     const rateLabel = hasPostedRate ? formatMoney(data.rateDollars) : formatUserRateInputValue(shadowHost?.__datExtUserRate) || "\u2014";
     const tollLine = tollMainLineDisplay(route?.tollStatus, route?.tollSource, loadingRoute);
-    const loadSnapshot = emailIncludeSnapshot ? buildLoadSnapshotForEmail(data, calculatedRpm, milesForRpm, loadingRoute, rateLabel, tollLine) : "";
-    const offerBodyFull = emailIncludeSnapshot ? `${loadSnapshot}
-
-${offerBody}`.trim() : offerBody;
-    const bookingBodyFull = emailIncludeSnapshot ? `${loadSnapshot}
-
-${bookingBody}`.trim() : bookingBody;
+    const snapshotCtx = { data, calculatedRpm, milesForRpm, loadingRoute, rateLabel, tollLine };
     const actions = document.createElement("div");
     actions.className = "actions";
     const offerSend = buildActionButton("Send Offer Email", {
@@ -12604,26 +12639,28 @@ ${bookingBody}`.trim() : bookingBody;
     });
     if (data.contactEmail && !offerSend.disabled) {
       offerSend.addEventListener("click", () => {
-        if (!globalThis.chrome?.runtime?.sendMessage) {
-          window.location.href = buildMailto(data.contactEmail, offerSubject, offerBodyFull);
-          return;
-        }
-        openDatExtGmailDrawer({
-          mode: "offer",
-          contactEmail: data.contactEmail,
-          subject: offerSubject,
-          body: offerBodyFull,
-          chips: {
-            origin: data.origin,
-            destination: data.destination,
-            company: data.companyName,
-            rpm: formatOptionalRpm(calculatedRpm),
-            miles: formatOptionalMiles(milesForRpm, loadingRoute),
-            rate: rateLabel,
-            toll: tollLine
-          },
-          shadowHost: shadowHost ?? null,
-          userAccountEmail: senderEmail
+        withComposedEmailBody(offerBody, snapshotCtx, (body) => {
+          if (!globalThis.chrome?.runtime?.sendMessage) {
+            window.location.href = buildMailto(data.contactEmail, offerSubject, body);
+            return;
+          }
+          openDatExtGmailDrawer({
+            mode: "offer",
+            contactEmail: data.contactEmail,
+            subject: offerSubject,
+            body,
+            chips: {
+              origin: data.origin,
+              destination: data.destination,
+              company: data.companyName,
+              rpm: formatOptionalRpm(calculatedRpm),
+              miles: formatOptionalMiles(milesForRpm, loadingRoute),
+              rate: rateLabel,
+              toll: tollLine
+            },
+            shadowHost: shadowHost ?? null,
+            userAccountEmail: senderEmail
+          });
         });
       });
     }
@@ -12633,26 +12670,28 @@ ${bookingBody}`.trim() : bookingBody;
     });
     if (data.contactEmail && !bookingSend.disabled) {
       bookingSend.addEventListener("click", () => {
-        if (!globalThis.chrome?.runtime?.sendMessage) {
-          window.location.href = buildMailto(data.contactEmail, bookingSubject, bookingBodyFull);
-          return;
-        }
-        openDatExtGmailDrawer({
-          mode: "booking",
-          contactEmail: data.contactEmail,
-          subject: bookingSubject,
-          body: bookingBodyFull,
-          chips: {
-            origin: data.origin,
-            destination: data.destination,
-            company: data.companyName,
-            rpm: formatOptionalRpm(calculatedRpm),
-            miles: formatOptionalMiles(milesForRpm, loadingRoute),
-            rate: rateLabel,
-            toll: tollLine
-          },
-          shadowHost: shadowHost ?? null,
-          userAccountEmail: senderEmail
+        withComposedEmailBody(bookingBody, snapshotCtx, (body) => {
+          if (!globalThis.chrome?.runtime?.sendMessage) {
+            window.location.href = buildMailto(data.contactEmail, bookingSubject, body);
+            return;
+          }
+          openDatExtGmailDrawer({
+            mode: "booking",
+            contactEmail: data.contactEmail,
+            subject: bookingSubject,
+            body,
+            chips: {
+              origin: data.origin,
+              destination: data.destination,
+              company: data.companyName,
+              rpm: formatOptionalRpm(calculatedRpm),
+              miles: formatOptionalMiles(milesForRpm, loadingRoute),
+              rate: rateLabel,
+              toll: tollLine
+            },
+            shadowHost: shadowHost ?? null,
+            userAccountEmail: senderEmail
+          });
         });
       });
     }
@@ -12663,12 +12702,14 @@ ${bookingBody}`.trim() : bookingBody;
         dataRole: "offer-gmail",
         variant: "ghost",
         onClick: () => {
-          const picked = pickGmailComposeOrMailto(data.contactEmail, offerSubject, offerBodyFull, gmailComposeOptions);
-          if (picked.usedGmail) {
-            window.open(picked.href, "_blank", "noopener,noreferrer");
-          } else {
-            window.location.href = picked.href;
-          }
+          withComposedEmailBody(offerBody, snapshotCtx, (body) => {
+            const picked = pickGmailComposeOrMailto(data.contactEmail, offerSubject, body, gmailComposeOptions);
+            if (picked.usedGmail) {
+              window.open(picked.href, "_blank", "noopener,noreferrer");
+            } else {
+              window.location.href = picked.href;
+            }
+          });
         }
       }),
       bookingSend,
@@ -12677,12 +12718,14 @@ ${bookingBody}`.trim() : bookingBody;
         dataRole: "booking-gmail",
         variant: "ghost",
         onClick: () => {
-          const picked = pickGmailComposeOrMailto(data.contactEmail, bookingSubject, bookingBodyFull, gmailComposeOptions);
-          if (picked.usedGmail) {
-            window.open(picked.href, "_blank", "noopener,noreferrer");
-          } else {
-            window.location.href = picked.href;
-          }
+          withComposedEmailBody(bookingBody, snapshotCtx, (body) => {
+            const picked = pickGmailComposeOrMailto(data.contactEmail, bookingSubject, body, gmailComposeOptions);
+            if (picked.usedGmail) {
+              window.open(picked.href, "_blank", "noopener,noreferrer");
+            } else {
+              window.location.href = picked.href;
+            }
+          });
         }
       }),
       buildActionButton("Get Tolls", {
@@ -13420,12 +13463,6 @@ ${bookingBody}`.trim() : bookingBody;
   var DAT_EXT_NUMEO_COLUMN_KEY = "datExtNumeoColumn";
   function defaultNumeoColumnEnabled() {
     return true;
-  }
-
-  // src/email-settings.js
-  var DAT_EXT_EMAIL_INCLUDE_SNAPSHOT_KEY = "datExtEmailIncludeSnapshot";
-  function defaultEmailIncludeSnapshotEnabled() {
-    return false;
   }
 
   // src/google-account.js
@@ -14400,7 +14437,6 @@ ${bookingBody}`.trim() : bookingBody;
   }
   function start() {
     state.appliedTargets = parseTargetsFromPrefs(readStoredPrefs());
-    loadEmailTemplatesFromStorage();
     loadEmailUiStateFromStorage();
     attachEmailTemplateListener();
     attachNumeoColumnPreferenceListener();
@@ -14408,11 +14444,13 @@ ${bookingBody}`.trim() : bookingBody;
     attachUserAccountEmailListener();
     attachRouteIconDirectionsListener();
     attachRowSummaryDirectionsListener();
-    startObserver();
-    scheduleScan(true);
-    if (!String(state.userAccountEmail || "").trim()) {
-      maybeSilentGoogleSessionSync();
-    }
+    loadEmailTemplatesFromStorage(() => {
+      startObserver();
+      scheduleScan(true);
+      if (!String(state.userAccountEmail || "").trim()) {
+        maybeSilentGoogleSessionSync();
+      }
+    });
   }
   function applyTollguruSkipPolylineFromRecord(record) {
     const key = String(state.tollguruApiKey || "").trim();
@@ -14508,15 +14546,16 @@ ${bookingBody}`.trim() : bookingBody;
       scheduleScan(true);
     });
   }
-  function loadEmailTemplatesFromStorage() {
+  function loadEmailTemplatesFromStorage(onReady) {
     if (!globalThis.chrome?.storage?.local?.get) {
+      onReady?.();
       return;
     }
     chrome.storage.local.get([EMAIL_OFFER_TEMPLATE_KEY, EMAIL_BOOKING_TEMPLATE_KEY, DAT_EXT_EMAIL_INCLUDE_SNAPSHOT_KEY], (r) => {
       state.emailOfferTemplate = r[EMAIL_OFFER_TEMPLATE_KEY] ?? "";
       state.emailBookingTemplate = r[EMAIL_BOOKING_TEMPLATE_KEY] ?? "";
       state.emailIncludeSnapshot = r[DAT_EXT_EMAIL_INCLUDE_SNAPSHOT_KEY] === true;
-      scheduleScan(true);
+      onReady?.();
     });
   }
   function loadEmailUiStateFromStorage() {

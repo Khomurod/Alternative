@@ -1,15 +1,17 @@
 /**
- * Stage extension → dist/extension, then compile Windows installer (.exe).
+ * Stage extension → dist/extension, then compile Windows installer (.exe) and/or release zip.
  * Does not modify src/ or overwrite repo-root content.js/popup.js.
  *
- * Prerequisites: NSIS 3.x — `makensis.exe` on PATH, or set env `MAKENSIS_PATH`
- * to its full path. Common default: `%ProgramFiles(x86)%\\NSIS\\makensis.exe`
+ * Prerequisites (exe only): NSIS 3.x — `makensis.exe` on PATH, or set env `MAKENSIS_PATH`
  *
  * Flags:
- *   --stage-only — build dist/extension only, skip compiling the installer
+ *   --stage-only — build dist/extension only
+ *   --zip        — stage + README-INSTALL.md + DAT-Dispatcher-Assist-<version>.zip (no NSIS)
+ *   (default)    — stage + INSTALL.html + DAT-Dispatcher-Assist-Setup.exe
  */
 
 import { readFileSync, writeFileSync, rmSync, mkdirSync, cpSync, existsSync } from "fs";
+import { execSync } from "child_process";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 import { buildSync } from "esbuild";
@@ -20,8 +22,14 @@ const root = resolve(__dirname, "..");
 const staging = join(root, "dist", "extension");
 const manifestPath = join(root, "manifest.json");
 const exeName = "DAT-Dispatcher-Assist-Setup.exe";
+const zipFolderName = "DAT-Dispatcher-Assist";
 
 const stageOnly = process.argv.includes("--stage-only");
+const buildZip = process.argv.includes("--zip");
+
+function logPrefix() {
+  return buildZip ? "[dist:zip]" : "[dist:exe]";
+}
 
 function findMakensisPath() {
   const envPath = process.env.MAKENSIS_PATH?.trim();
@@ -102,9 +110,13 @@ function copyStatics() {
   }
 
   const imagesDir = join(root, "leaflet-images");
-  if (existsSync(imagesDir)) {
+  if (existsDir(imagesDir)) {
     cpSync(imagesDir, join(staging, "leaflet-images"), { recursive: true });
   }
+}
+
+function existsDir(path) {
+  return existsSync(path);
 }
 
 function writeInstallHtml() {
@@ -139,6 +151,90 @@ function writeInstallHtml() {
   writeFileSync(join(staging, "INSTALL.html"), html, "utf8");
 }
 
+/**
+ * @param {string} version
+ */
+function writeInstallReadme(version) {
+  const md = `# DAT Dispatcher Assist — Install and use
+
+Version **${version}** (Chrome extension, not from the Web Store).
+
+**Recommended install:** use this ZIP and **Load unpacked** in Chrome. Some antivirus tools falsely flag the optional \`Setup.exe\` installer.
+
+---
+
+## 1. Extract the ZIP
+
+1. Extract this entire folder to a **permanent** location, for example:
+   - \`Documents\\DAT-Dispatcher-Assist\`
+2. Keep the folder on disk while you use the extension (do not delete it after installing).
+3. The folder you select in Chrome must contain \`manifest.json\` (this folder).
+
+---
+
+## 2. Load the extension in Chrome
+
+1. Open **Google Chrome**.
+2. Go to \`chrome://extensions\`
+3. Turn on **Developer mode** (top-right).
+4. Click **Load unpacked**.
+5. Select this folder (the one containing \`manifest.json\`).
+6. Confirm **DAT Dispatcher Assist Tool** appears and is **enabled**.
+
+---
+
+## 3. Open settings (Side Panel)
+
+1. Click the extension icon in Chrome (or open the **Side Panel** for this extension).
+2. Optional: **Sign in with Google** if you want **Send email** from DAT (Gmail API). You can still use **Open … in Gmail** without signing in.
+3. Under **Email templates**, set your offer/booking text. Use the placeholder buttons (**Pick up location**, **Delivery location**, etc.) to insert \`{{origin}}\`, \`{{destination}}\`, \`{{company}}\`, \`{{email}}\`.
+4. Leave **Include load summary above email body** **unchecked** if you want the email body to be **only** your template text (recommended).
+5. Click **Save templates & options**.
+
+---
+
+## 4. Use on DAT
+
+1. Open [DAT](https://www.dat.com/) and sign in as usual.
+2. Expand a load row to see the assist column (route, tolls, email actions).
+3. Click **Send Offer Email** or **Send Booking Email** to open the Gmail panel on the page.
+4. The **Currently sends** preview in the side panel shows sample data; the real load uses actual pickup/delivery from DAT.
+
+---
+
+## 5. Updates
+
+1. Download a newer ZIP build.
+2. Replace this folder (or extract the new ZIP to a new folder).
+3. In \`chrome://extensions\`, click **Reload** on DAT Dispatcher Assist Tool.
+4. Reload your DAT tabs.
+
+---
+
+## Google sign-in (Gmail from DAT)
+
+This build uses a **fixed extension ID** (same on every PC when you Load unpacked from this folder).
+
+1. After installing, open \`chrome://extensions\` and note the extension **ID** (32 letters).
+2. **Sign in with Google** in the extension Side Panel.
+3. If you see \`bad client id\`, your administrator must set the Google Cloud OAuth client (type **Chrome extension**) **Application ID** to match that extension ID. End users cannot fix this in Chrome.
+4. The Gmail API must be enabled on the same Google Cloud project as the OAuth client.
+
+---
+
+## Optional: TollGuru
+
+Add your TollGuru API key in the side panel if you want truck toll estimates in the assist column.
+
+---
+
+## Antivirus note
+
+If \`DAT-Dispatcher-Assist-Setup.exe\` was blocked or flagged, **use this ZIP method instead**. It only copies plain extension files; there is no installer program.
+`;
+  writeFileSync(join(staging, "README-INSTALL.md"), md, "utf8");
+}
+
 function viProductQuad(versionLabel) {
   const parts = String(versionLabel || "0")
     .split(/[^0-9]+/)
@@ -151,15 +247,49 @@ function viProductQuad(versionLabel) {
   return parts.join(".");
 }
 
-async function main() {
-  const manifest = readJson(manifestPath);
-  const version = String(manifest.version || "0.0.0").trim();
-  const viQuad = viProductQuad(version);
+/**
+ * @param {string} version
+ * @returns {string} Absolute path to created zip
+ */
+function createReleaseZip(version) {
+  const zipFileName = `DAT-Dispatcher-Assist-${version}.zip`;
+  const zipPath = join(root, zipFileName);
+  const payloadRoot = join(root, "dist", "zip-payload");
+  const payloadDir = join(payloadRoot, zipFolderName);
 
-  console.info("[dist:exe] Staging extension…");
+  rmSync(payloadRoot, { recursive: true, force: true });
+  mkdirSync(payloadDir, { recursive: true });
+  cpSync(staging, payloadDir, { recursive: true });
+
+  if (existsSync(zipPath)) {
+    rmSync(zipPath, { force: true });
+  }
+
+  if (process.platform === "win32") {
+    const src = payloadDir.replace(/'/g, "''");
+    const dest = zipPath.replace(/'/g, "''");
+    execSync(
+      `powershell -NoProfile -Command "Compress-Archive -LiteralPath '${src}' -DestinationPath '${dest}' -Force"`,
+      { stdio: "inherit" }
+    );
+  } else {
+    console.warn(
+      `${logPrefix()} Automatic zip requires Windows PowerShell. Manually zip this folder:`,
+      payloadDir
+    );
+    return payloadDir;
+  }
+
+  return zipPath;
+}
+
+function stageExtension() {
   cleanStaging();
   bundleExtension();
   copyStatics();
+}
+
+async function buildExeInstaller(version, viQuad) {
   writeInstallHtml();
 
   const srcDirAbs = staging.replace(/\\/g, "/");
@@ -169,11 +299,6 @@ async function main() {
   if (!existsSync(nsi)) {
     console.error("Missing NSIS script:", nsi);
     process.exitCode = 1;
-    return;
-  }
-
-  if (stageOnly) {
-    console.info("[dist:exe] Done (--stage-only). Extension:", staging);
     return;
   }
 
@@ -189,18 +314,18 @@ async function main() {
   };
   if (makensisExe) {
     compilerOpts.pathToMakensis = makensisExe;
-    console.info("[dist:exe] Using NSIS compiler:", makensisExe);
+    console.info(`${logPrefix()} Using NSIS compiler:`, makensisExe);
   }
 
-  console.info("[dist:exe] Compiling installer with NSIS →", exeName);
+  console.info(`${logPrefix()} Compiling installer with NSIS →`, exeName);
 
   let result;
   try {
     result = await compile(resolve(nsi), compilerOpts);
   } catch (err) {
-    console.error("[dist:exe] Could not run NSIS compiler:", err?.message ?? err);
+    console.error(`${logPrefix()} Could not run NSIS compiler:`, err?.message ?? err);
     console.error(
-      "[dist:exe] Install NSIS 3.x from https://nsis.sourceforge.io/ (default path Program Files (x86)\\NSIS),\n[dist:exe] add makensis.exe to PATH, or set MAKENSIS_PATH to the full path of makensis.exe.\n[dist:exe] Staged extension is ready at:",
+      `${logPrefix()} Install NSIS 3.x or set MAKENSIS_PATH. Staged extension:`,
       staging
     );
     process.exitCode = 1;
@@ -214,17 +339,40 @@ async function main() {
 
   if (result.status !== 0) {
     console.error(
-      "[dist:exe] NSIS compiler failed (status " +
-        result.status +
-        "). Install NSIS 3.x or set MAKENSIS_PATH.\n[dist:exe] Staged extension:",
+      `${logPrefix()} NSIS compiler failed (status ${result.status}). Staged extension:`,
       staging
     );
     process.exitCode = 1;
     return;
   }
 
-  console.info("[dist:exe] Done. Extension:", staging);
-  console.info("[dist:exe] Installer:", outFileAbs);
+  console.info(`${logPrefix()} Installer:`, outFileAbs);
+}
+
+async function main() {
+  const manifest = readJson(manifestPath);
+  const version = String(manifest.version || "0.0.0").trim();
+  const viQuad = viProductQuad(version);
+  const prefix = logPrefix();
+
+  console.info(`${prefix} Staging extension…`);
+  stageExtension();
+
+  if (stageOnly) {
+    console.info(`${prefix} Done (--stage-only). Extension:`, staging);
+    return;
+  }
+
+  if (buildZip) {
+    writeInstallReadme(version);
+    const zipOut = createReleaseZip(version);
+    console.info(`${prefix} Done. Extension:`, staging);
+    console.info(`${prefix} Release zip:`, zipOut);
+    return;
+  }
+
+  await buildExeInstaller(version, viQuad);
+  console.info(`${prefix} Done. Extension:`, staging);
 }
 
 main().catch((err) => {

@@ -3,6 +3,8 @@ node_modules/
 dist/
 
 DAT-Dispatcher-Assist-Setup.exe
+DAT-Dispatcher-Assist-*.zip
 
 tools/nsis-portable/
 tools/nsis-*.zip
+tools/extension-private.pem

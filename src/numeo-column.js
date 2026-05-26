@@ -1,3 +1,4 @@
+import { DAT_EXT_EMAIL_INCLUDE_SNAPSHOT_KEY } from "./email-settings.js";
 import {
   DEFAULT_BOOKING_EMAIL_TEMPLATE,
   DEFAULT_OFFER_EMAIL_TEMPLATE,
@@ -608,6 +609,57 @@ function buildLoadSnapshotForEmail(data, calculatedRpm, milesForRpm, loadingRout
   ].join("\n");
 }
 
+/**
+ * @param {string} templateBody
+ * @param {boolean} includeSnapshot
+ * @param {string} snapshotText
+ * @returns {string}
+ */
+function composeEmailBody(templateBody, includeSnapshot, snapshotText) {
+  const body = String(templateBody ?? "").trim();
+  if (!includeSnapshot) {
+    return body;
+  }
+  const snapshot = String(snapshotText ?? "").trim();
+  if (!snapshot) {
+    return body;
+  }
+  return `${snapshot}\n\n${body}`.trim();
+}
+
+/**
+ * @param {(includeSnapshot: boolean) => void} callback
+ */
+function readEmailIncludeSnapshot(callback) {
+  const storage = globalThis.chrome?.storage?.local;
+  if (!storage?.get) {
+    callback(false);
+    return;
+  }
+  storage.get([DAT_EXT_EMAIL_INCLUDE_SNAPSHOT_KEY], (record) => {
+    callback(record[DAT_EXT_EMAIL_INCLUDE_SNAPSHOT_KEY] === true);
+  });
+}
+
+/**
+ * @param {string} templateBody
+ * @param {{ data: *, calculatedRpm: *, milesForRpm: *, loadingRoute: boolean, rateLabel: string, tollLine: string }} snapshotCtx
+ * @param {(body: string) => void} run
+ */
+function withComposedEmailBody(templateBody, snapshotCtx, run) {
+  readEmailIncludeSnapshot((includeSnapshot) => {
+    const snapshot = buildLoadSnapshotForEmail(
+      snapshotCtx.data,
+      snapshotCtx.calculatedRpm,
+      snapshotCtx.milesForRpm,
+      snapshotCtx.loadingRoute,
+      snapshotCtx.rateLabel,
+      snapshotCtx.tollLine
+    );
+    run(composeEmailBody(templateBody, includeSnapshot, snapshot));
+  });
+}
+
 function defaultOfferBody(data) {
   return (
     interpolateEmailTemplate(DEFAULT_OFFER_EMAIL_TEMPLATE, {
@@ -734,7 +786,6 @@ export function renderColumn(card, ctx) {
     templateMode,
     shadowHost,
     onRefreshRoute,
-    emailIncludeSnapshot = false,
     userAccountEmail = "",
     onRequestGoogleLogin = null,
     tollguruApiKey = ""
@@ -788,11 +839,7 @@ export function renderColumn(card, ctx) {
     ? formatMoney(data.rateDollars)
     : formatUserRateInputValue(shadowHost?.__datExtUserRate) || "—";
   const tollLine = tollMainLineDisplay(route?.tollStatus, route?.tollSource, loadingRoute);
-  const loadSnapshot = emailIncludeSnapshot
-    ? buildLoadSnapshotForEmail(data, calculatedRpm, milesForRpm, loadingRoute, rateLabel, tollLine)
-    : "";
-  const offerBodyFull = emailIncludeSnapshot ? `${loadSnapshot}\n\n${offerBody}`.trim() : offerBody;
-  const bookingBodyFull = emailIncludeSnapshot ? `${loadSnapshot}\n\n${bookingBody}`.trim() : bookingBody;
+  const snapshotCtx = { data, calculatedRpm, milesForRpm, loadingRoute, rateLabel, tollLine };
 
   const actions = document.createElement("div");
   actions.className = "actions";
@@ -803,26 +850,28 @@ export function renderColumn(card, ctx) {
   });
   if (data.contactEmail && !offerSend.disabled) {
     offerSend.addEventListener("click", () => {
-      if (!globalThis.chrome?.runtime?.sendMessage) {
-        window.location.href = buildMailto(data.contactEmail, offerSubject, offerBodyFull);
-        return;
-      }
-      openDatExtGmailDrawer({
-        mode: "offer",
-        contactEmail: data.contactEmail,
-        subject: offerSubject,
-        body: offerBodyFull,
-        chips: {
-          origin: data.origin,
-          destination: data.destination,
-          company: data.companyName,
-          rpm: formatOptionalRpm(calculatedRpm),
-          miles: formatOptionalMiles(milesForRpm, loadingRoute),
-          rate: rateLabel,
-          toll: tollLine
-        },
-        shadowHost: shadowHost ?? null,
-        userAccountEmail: senderEmail
+      withComposedEmailBody(offerBody, snapshotCtx, (body) => {
+        if (!globalThis.chrome?.runtime?.sendMessage) {
+          window.location.href = buildMailto(data.contactEmail, offerSubject, body);
+          return;
+        }
+        openDatExtGmailDrawer({
+          mode: "offer",
+          contactEmail: data.contactEmail,
+          subject: offerSubject,
+          body,
+          chips: {
+            origin: data.origin,
+            destination: data.destination,
+            company: data.companyName,
+            rpm: formatOptionalRpm(calculatedRpm),
+            miles: formatOptionalMiles(milesForRpm, loadingRoute),
+            rate: rateLabel,
+            toll: tollLine
+          },
+          shadowHost: shadowHost ?? null,
+          userAccountEmail: senderEmail
+        });
       });
     });
   }
@@ -833,26 +882,28 @@ export function renderColumn(card, ctx) {
   });
   if (data.contactEmail && !bookingSend.disabled) {
     bookingSend.addEventListener("click", () => {
-      if (!globalThis.chrome?.runtime?.sendMessage) {
-        window.location.href = buildMailto(data.contactEmail, bookingSubject, bookingBodyFull);
-        return;
-      }
-      openDatExtGmailDrawer({
-        mode: "booking",
-        contactEmail: data.contactEmail,
-        subject: bookingSubject,
-        body: bookingBodyFull,
-        chips: {
-          origin: data.origin,
-          destination: data.destination,
-          company: data.companyName,
-          rpm: formatOptionalRpm(calculatedRpm),
-          miles: formatOptionalMiles(milesForRpm, loadingRoute),
-          rate: rateLabel,
-          toll: tollLine
-        },
-        shadowHost: shadowHost ?? null,
-        userAccountEmail: senderEmail
+      withComposedEmailBody(bookingBody, snapshotCtx, (body) => {
+        if (!globalThis.chrome?.runtime?.sendMessage) {
+          window.location.href = buildMailto(data.contactEmail, bookingSubject, body);
+          return;
+        }
+        openDatExtGmailDrawer({
+          mode: "booking",
+          contactEmail: data.contactEmail,
+          subject: bookingSubject,
+          body,
+          chips: {
+            origin: data.origin,
+            destination: data.destination,
+            company: data.companyName,
+            rpm: formatOptionalRpm(calculatedRpm),
+            miles: formatOptionalMiles(milesForRpm, loadingRoute),
+            rate: rateLabel,
+            toll: tollLine
+          },
+          shadowHost: shadowHost ?? null,
+          userAccountEmail: senderEmail
+        });
       });
     });
   }
@@ -864,12 +915,14 @@ export function renderColumn(card, ctx) {
       dataRole: "offer-gmail",
       variant: "ghost",
       onClick: () => {
-        const picked = pickGmailComposeOrMailto(data.contactEmail, offerSubject, offerBodyFull, gmailComposeOptions);
-        if (picked.usedGmail) {
-          window.open(picked.href, "_blank", "noopener,noreferrer");
-        } else {
-          window.location.href = picked.href;
-        }
+        withComposedEmailBody(offerBody, snapshotCtx, (body) => {
+          const picked = pickGmailComposeOrMailto(data.contactEmail, offerSubject, body, gmailComposeOptions);
+          if (picked.usedGmail) {
+            window.open(picked.href, "_blank", "noopener,noreferrer");
+          } else {
+            window.location.href = picked.href;
+          }
+        });
       }
     }),
     bookingSend,
@@ -878,12 +931,14 @@ export function renderColumn(card, ctx) {
       dataRole: "booking-gmail",
       variant: "ghost",
       onClick: () => {
-        const picked = pickGmailComposeOrMailto(data.contactEmail, bookingSubject, bookingBodyFull, gmailComposeOptions);
-        if (picked.usedGmail) {
-          window.open(picked.href, "_blank", "noopener,noreferrer");
-        } else {
-          window.location.href = picked.href;
-        }
+        withComposedEmailBody(bookingBody, snapshotCtx, (body) => {
+          const picked = pickGmailComposeOrMailto(data.contactEmail, bookingSubject, body, gmailComposeOptions);
+          if (picked.usedGmail) {
+            window.open(picked.href, "_blank", "noopener,noreferrer");
+          } else {
+            window.location.href = picked.href;
+          }
+        });
       }
     }),
     buildActionButton("Get Tolls", {

@@ -7,7 +7,11 @@
     "build": "esbuild src/content-entry.js --bundle --outfile=content.js --platform=browser --target=chrome114 --legal-comments=none && esbuild src/popup-entry.js --bundle --outfile=popup.js --platform=browser --target=chrome114 --legal-comments=none && esbuild src/sidepanel-entry.js --bundle --outfile=sidepanel.js --platform=browser --target=chrome114 --legal-comments=none",
     "test": "node --test tests/extension-recovery.test.js",
     "dist:exe": "node scripts/build-exe.mjs",
-    "dist:stage": "node scripts/build-exe.mjs --stage-only"
+    "dist:zip": "node scripts/build-exe.mjs --zip",
+    "dist": "node scripts/build-exe.mjs --zip && node scripts/build-exe.mjs",
+    "dist:stage": "node scripts/build-exe.mjs --stage-only",
+    "extension:key": "node scripts/generate-extension-key.mjs",
+    "extension:id": "node scripts/extension-id.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.24.2",
