@@ -76,6 +76,12 @@ function bundleExtension() {
 
   buildSync({
     ...common,
+    entryPoints: [join(root, "src/sidepanel-entry.js")],
+    outfile: join(staging, "sidepanel.js")
+  });
+
+  buildSync({
+    ...common,
     entryPoints: [join(root, "background.js")],
     outfile: join(staging, "background.js"),
     format: "esm"
@@ -88,6 +94,7 @@ function copyStatics() {
     "styles.css",
     "leaflet-vendor.css",
     "popup.html",
+    "sidepanel.html",
     "cities.json"
   ];
   for (const f of files) {

@@ -451,6 +451,7 @@ function safeRender(host, card, data, route, loadingRoute, offerTpl, bookingTpl,
     templateMode,
     onRefreshRoute,
     userAccountEmail: renderExtras.userAccountEmail ?? "",
+    emailIncludeSnapshot: renderExtras.emailIncludeSnapshot ?? false,
     onRequestGoogleLogin: renderExtras.onRequestGoogleLogin ?? null,
     tollguruApiKey: renderExtras.tollguruApiKey ?? "",
     mapInstance: null
@@ -467,10 +468,12 @@ export function enhanceLoadDetails(doc, context) {
   const bookingTpl = context.emailBookingTemplate ?? "";
   const templateMode = context.emailTemplateMode ?? "default";
   const routeInspector = context.routeInspector ?? null;
+  const emailIncludeSnapshot = context.emailIncludeSnapshot === true;
   const renderExtras = {
     userAccountEmail: context.userAccountEmail ?? "",
     onRequestGoogleLogin: context.onRequestGoogleLogin ?? null,
-    tollguruApiKey: context.tollguruApiKey ?? ""
+    tollguruApiKey: context.tollguruApiKey ?? "",
+    emailIncludeSnapshot
   };
 
   for (const host of hosts) {

@@ -109,6 +109,67 @@
       .account-line {
         margin-bottom: 6px;
       }
+
+      #tpl-chips-host {
+        margin-bottom: 10px;
+      }
+
+      .tpl-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .tpl-chip {
+        margin: 0;
+        padding: 5px 10px;
+        font-size: 12px;
+        font-weight: 600;
+        border-radius: 999px;
+        border: 1px solid #d0d5dd;
+        background: #f9fafb;
+        color: #344054;
+        cursor: pointer;
+      }
+
+      .tpl-chip:hover {
+        background: #f2f4f7;
+      }
+
+      .tpl-preview {
+        margin: 6px 0 14px;
+      }
+
+      .tpl-preview-label {
+        display: block;
+        font-size: 11px;
+        font-weight: 600;
+        color: #667085;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-bottom: 4px;
+      }
+
+      .tpl-preview pre {
+        margin: 0;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid #eaecf0;
+        background: #f9fafb;
+        color: #344054;
+        font-size: 12px;
+        line-height: 1.45;
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 140px;
+        overflow-y: auto;
+      }
+
+      .hint.tpl-snapshot-note {
+        margin-top: -6px;
+        margin-bottom: 12px;
+        font-size: 12px;
+      }
     </style>
   </head>
   <body>
@@ -129,14 +190,34 @@
       </p>
     </div>
     <p class="hint">
-      Optional email bodies for the load detail buttons. Leave blank to use built-in text. Placeholders:
-      <code>{{company}}</code>, <code>{{origin}}</code>, <code>{{destination}}</code>, <code>{{email}}</code>
+      Optional email bodies for the load detail buttons. Click a field to insert it at the cursor in the focused box. Leave blank to use the built-in text shown in preview.
     </p>
+    <div id="tpl-chips-host"></div>
     <label for="offer-tpl">Offer email body</label>
     <textarea id="offer-tpl" spellcheck="true" aria-label="Offer email body template"></textarea>
+    <div class="tpl-preview">
+      <span class="tpl-preview-label">Currently sends (sample data)</span>
+      <pre id="offer-preview" aria-live="polite"></pre>
+    </div>
     <label for="booking-tpl">Booking email body</label>
     <textarea id="booking-tpl" spellcheck="true" aria-label="Booking email body template"></textarea>
+    <div class="tpl-preview">
+      <span class="tpl-preview-label">Currently sends (sample data)</span>
+      <pre id="booking-preview" aria-live="polite"></pre>
+    </div>
+    <p class="hint tpl-snapshot-note">
+      By default, your Gmail body is exactly your template text. Enable the checkbox below to include a short load summary (origin, miles, RPM, etc.) above your template.
+    </p>
     <button id="save" type="button">Save templates</button>
+
+    <div class="feature-block">
+      <label class="row">
+        <input type="checkbox" id="email-include-snapshot" />
+        <span>Include load summary above email body</span>
+      </label>
+      <p class="hint small">Default OFF: Gmail body matches your saved template exactly.</p>
+    </div>
+
     <div class="feature-block">
       <label class="row">
         <input type="checkbox" id="numeo-column" />

@@ -1,4 +1,8 @@
-import { interpolateEmailTemplate } from "./email-template.js";
+import {
+  DEFAULT_BOOKING_EMAIL_TEMPLATE,
+  DEFAULT_OFFER_EMAIL_TEMPLATE,
+  interpolateEmailTemplate
+} from "./email-template.js";
 import { openDatExtGmailDrawer } from "./gmail-drawer.js";
 import { pickGmailComposeOrMailto } from "./gmail-compose.js";
 import { destroyLaneMap, mountLaneMap } from "./numeo-map.js";
@@ -605,15 +609,25 @@ function buildLoadSnapshotForEmail(data, calculatedRpm, milesForRpm, loadingRout
 }
 
 function defaultOfferBody(data) {
-  return `Hello ${data.companyName || ""},\n\nI am reaching out regarding the load from ${data.origin || "Origin"} to ${
-    data.destination || "Destination"
-  }. Is this still available?\n\nThank you.`;
+  return (
+    interpolateEmailTemplate(DEFAULT_OFFER_EMAIL_TEMPLATE, {
+      origin: data.origin || "Origin",
+      destination: data.destination || "Destination",
+      companyName: data.companyName || "",
+      contactEmail: data.contactEmail || ""
+    }) ?? ""
+  );
 }
 
 function defaultBookingBody(data) {
-  return `Hello ${data.companyName || ""},\n\nI would like to discuss booking the load from ${data.origin || "Origin"} to ${
-    data.destination || "Destination"
-  }.\n\nThank you.`;
+  return (
+    interpolateEmailTemplate(DEFAULT_BOOKING_EMAIL_TEMPLATE, {
+      origin: data.origin || "Origin",
+      destination: data.destination || "Destination",
+      companyName: data.companyName || "",
+      contactEmail: data.contactEmail || ""
+    }) ?? ""
+  );
 }
 
 function formatMoney(value) {
@@ -720,6 +734,7 @@ export function renderColumn(card, ctx) {
     templateMode,
     shadowHost,
     onRefreshRoute,
+    emailIncludeSnapshot = false,
     userAccountEmail = "",
     onRequestGoogleLogin = null,
     tollguruApiKey = ""
@@ -769,6 +784,16 @@ export function renderColumn(card, ctx) {
   const offerBody = templateMode === "booking" ? bookingBodyBase : offerBodyBase;
   const bookingBody = templateMode === "offer" ? offerBodyBase : bookingBodyBase;
 
+  const rateLabel = hasPostedRate
+    ? formatMoney(data.rateDollars)
+    : formatUserRateInputValue(shadowHost?.__datExtUserRate) || "—";
+  const tollLine = tollMainLineDisplay(route?.tollStatus, route?.tollSource, loadingRoute);
+  const loadSnapshot = emailIncludeSnapshot
+    ? buildLoadSnapshotForEmail(data, calculatedRpm, milesForRpm, loadingRoute, rateLabel, tollLine)
+    : "";
+  const offerBodyFull = emailIncludeSnapshot ? `${loadSnapshot}\n\n${offerBody}`.trim() : offerBody;
+  const bookingBodyFull = emailIncludeSnapshot ? `${loadSnapshot}\n\n${bookingBody}`.trim() : bookingBody;
+
   const actions = document.createElement("div");
   actions.className = "actions";
 
@@ -779,19 +804,14 @@ export function renderColumn(card, ctx) {
   if (data.contactEmail && !offerSend.disabled) {
     offerSend.addEventListener("click", () => {
       if (!globalThis.chrome?.runtime?.sendMessage) {
-        window.location.href = buildMailto(data.contactEmail, offerSubject, offerBody);
+        window.location.href = buildMailto(data.contactEmail, offerSubject, offerBodyFull);
         return;
       }
-      const rateLabel = hasPostedRate
-        ? formatMoney(data.rateDollars)
-        : formatUserRateInputValue(shadowHost?.__datExtUserRate) || "—";
-      const tollLine = tollMainLineDisplay(route?.tollStatus, route?.tollSource, loadingRoute);
-      const snapshot = buildLoadSnapshotForEmail(data, calculatedRpm, milesForRpm, loadingRoute, rateLabel, tollLine);
       openDatExtGmailDrawer({
         mode: "offer",
         contactEmail: data.contactEmail,
         subject: offerSubject,
-        body: `${snapshot}\n\n${offerBody}`.trim(),
+        body: offerBodyFull,
         chips: {
           origin: data.origin,
           destination: data.destination,
@@ -814,19 +834,14 @@ export function renderColumn(card, ctx) {
   if (data.contactEmail && !bookingSend.disabled) {
     bookingSend.addEventListener("click", () => {
       if (!globalThis.chrome?.runtime?.sendMessage) {
-        window.location.href = buildMailto(data.contactEmail, bookingSubject, bookingBody);
+        window.location.href = buildMailto(data.contactEmail, bookingSubject, bookingBodyFull);
         return;
       }
-      const rateLabel = hasPostedRate
-        ? formatMoney(data.rateDollars)
-        : formatUserRateInputValue(shadowHost?.__datExtUserRate) || "—";
-      const tollLine = tollMainLineDisplay(route?.tollStatus, route?.tollSource, loadingRoute);
-      const snapshot = buildLoadSnapshotForEmail(data, calculatedRpm, milesForRpm, loadingRoute, rateLabel, tollLine);
       openDatExtGmailDrawer({
         mode: "booking",
         contactEmail: data.contactEmail,
         subject: bookingSubject,
-        body: `${snapshot}\n\n${bookingBody}`.trim(),
+        body: bookingBodyFull,
         chips: {
           origin: data.origin,
           destination: data.destination,
@@ -849,7 +864,7 @@ export function renderColumn(card, ctx) {
       dataRole: "offer-gmail",
       variant: "ghost",
       onClick: () => {
-        const picked = pickGmailComposeOrMailto(data.contactEmail, offerSubject, offerBody, gmailComposeOptions);
+        const picked = pickGmailComposeOrMailto(data.contactEmail, offerSubject, offerBodyFull, gmailComposeOptions);
         if (picked.usedGmail) {
           window.open(picked.href, "_blank", "noopener,noreferrer");
         } else {
@@ -863,7 +878,7 @@ export function renderColumn(card, ctx) {
       dataRole: "booking-gmail",
       variant: "ghost",
       onClick: () => {
-        const picked = pickGmailComposeOrMailto(data.contactEmail, bookingSubject, bookingBody, gmailComposeOptions);
+        const picked = pickGmailComposeOrMailto(data.contactEmail, bookingSubject, bookingBodyFull, gmailComposeOptions);
         if (picked.usedGmail) {
           window.open(picked.href, "_blank", "noopener,noreferrer");
         } else {

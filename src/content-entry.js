@@ -3,6 +3,7 @@ import { enhanceLoadDetails } from "./detail-panel.js";
 import { buildGoogleDirectionsUrlForPin, buildGoogleDirectionsUrlForRow } from "./directions-from-row.js";
 import { EMAIL_BOOKING_TEMPLATE_KEY, EMAIL_OFFER_TEMPLATE_KEY } from "./email-template.js";
 import { DAT_EXT_NUMEO_COLUMN_KEY, defaultNumeoColumnEnabled } from "./feature-flags.js";
+import { DAT_EXT_EMAIL_INCLUDE_SNAPSHOT_KEY, defaultEmailIncludeSnapshotEnabled } from "./email-settings.js";
 import { DAT_EXT_USER_ACCOUNT_EMAIL_KEY } from "./google-account.js";
 import {
   DAT_EXT_GOOGLE_TOLL_FALLBACK_KEY,
@@ -57,6 +58,7 @@ const state = {
   tollguruSkipPolylineForCurrentKey: false,
   emailOfferTemplate: "",
   emailBookingTemplate: "",
+  emailIncludeSnapshot: defaultEmailIncludeSnapshotEnabled(),
   numeroColumnEnabled: true,
   appliedTargets: {
     minRate: null,
@@ -230,9 +232,10 @@ function loadEmailTemplatesFromStorage() {
     return;
   }
 
-  chrome.storage.local.get([EMAIL_OFFER_TEMPLATE_KEY, EMAIL_BOOKING_TEMPLATE_KEY], (r) => {
+  chrome.storage.local.get([EMAIL_OFFER_TEMPLATE_KEY, EMAIL_BOOKING_TEMPLATE_KEY, DAT_EXT_EMAIL_INCLUDE_SNAPSHOT_KEY], (r) => {
     state.emailOfferTemplate = r[EMAIL_OFFER_TEMPLATE_KEY] ?? "";
     state.emailBookingTemplate = r[EMAIL_BOOKING_TEMPLATE_KEY] ?? "";
+    state.emailIncludeSnapshot = r[DAT_EXT_EMAIL_INCLUDE_SNAPSHOT_KEY] === true;
     scheduleScan(true);
   });
 }
@@ -283,7 +286,11 @@ function attachEmailTemplateListener() {
       return;
     }
 
-    if (!changes[EMAIL_OFFER_TEMPLATE_KEY] && !changes[EMAIL_BOOKING_TEMPLATE_KEY]) {
+    if (
+      !changes[EMAIL_OFFER_TEMPLATE_KEY] &&
+      !changes[EMAIL_BOOKING_TEMPLATE_KEY] &&
+      !changes[DAT_EXT_EMAIL_INCLUDE_SNAPSHOT_KEY]
+    ) {
       return;
     }
 
@@ -292,6 +299,10 @@ function attachEmailTemplateListener() {
     }
     if (changes[EMAIL_BOOKING_TEMPLATE_KEY]) {
       state.emailBookingTemplate = changes[EMAIL_BOOKING_TEMPLATE_KEY].newValue ?? "";
+    }
+
+    if (changes[DAT_EXT_EMAIL_INCLUDE_SNAPSHOT_KEY]) {
+      state.emailIncludeSnapshot = changes[DAT_EXT_EMAIL_INCLUDE_SNAPSHOT_KEY].newValue === true;
     }
 
     scheduleScan(true);
@@ -378,6 +389,7 @@ function scheduleScan(immediate) {
         routeInspector: state.routeInspector,
         emailOfferTemplate: state.emailOfferTemplate,
         emailBookingTemplate: state.emailBookingTemplate,
+        emailIncludeSnapshot: state.emailIncludeSnapshot,
         emailTemplateMode: state.emailUiState.selectedTemplate,
         numeroColumnEnabled: state.numeroColumnEnabled,
         userAccountEmail: state.userAccountEmail,

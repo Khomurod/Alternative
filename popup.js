@@ -2,9 +2,115 @@
   // src/email-template.js
   var EMAIL_OFFER_TEMPLATE_KEY = "dat-ext-email-offer-template-v1";
   var EMAIL_BOOKING_TEMPLATE_KEY = "dat-ext-email-booking-template-v1";
+  var DEFAULT_OFFER_EMAIL_TEMPLATE = `Hello {{company}},
+
+I am reaching out regarding the load from {{origin}} to {{destination}}. Is this still available?
+
+Thank you.`;
+  var DEFAULT_BOOKING_EMAIL_TEMPLATE = `Hello {{company}},
+
+I would like to discuss booking the load from {{origin}} to {{destination}}.
+
+Thank you.`;
+  var EMAIL_TEMPLATE_PREVIEW_VARS = {
+    origin: "Chicago, IL",
+    destination: "Dallas, TX",
+    companyName: "Example Broker LLC",
+    contactEmail: "dispatcher@example.com"
+  };
+  var EMAIL_TEMPLATE_PLACEHOLDERS = [
+    { label: "Pick up location", token: "{{origin}}" },
+    { label: "Delivery location", token: "{{destination}}" },
+    { label: "Company", token: "{{company}}" },
+    { label: "Contact email", token: "{{email}}" }
+  ];
+  function interpolateEmailTemplate(template, vars) {
+    const raw = String(template ?? "").trim();
+    if (!raw) {
+      return null;
+    }
+    const origin = vars.origin ?? "";
+    const destination = vars.destination ?? "";
+    const company = vars.companyName ?? "";
+    const email = vars.contactEmail ?? "";
+    return raw.replaceAll("{{origin}}", origin).replaceAll("{{destination}}", destination).replaceAll("{{company}}", company).replaceAll("{{email}}", email);
+  }
+  function previewEmailTemplate(savedTemplate, defaultTemplate, vars = EMAIL_TEMPLATE_PREVIEW_VARS) {
+    const effective = String(savedTemplate ?? "").trim() || defaultTemplate;
+    return interpolateEmailTemplate(effective, vars) ?? "";
+  }
+  function insertPlaceholderAtCursor(textarea, token) {
+    const start = textarea.selectionStart ?? textarea.value.length;
+    const end = textarea.selectionEnd ?? start;
+    const value = textarea.value;
+    if (typeof textarea.setRangeText === "function") {
+      textarea.setRangeText(token, start, end, "end");
+    } else {
+      textarea.value = value.slice(0, start) + token + value.slice(end);
+      const pos = start + token.length;
+      textarea.setSelectionRange(pos, pos);
+    }
+    textarea.focus();
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  // src/email-template-editor.js
+  function initEmailTemplateEditor(options) {
+    const { offerTextarea, bookingTextarea, offerPreviewEl: offerPreviewEl2, bookingPreviewEl: bookingPreviewEl2, chipsRoot } = options;
+    let activeTextarea = offerTextarea;
+    function refreshPreviews() {
+      offerPreviewEl2.textContent = previewEmailTemplate(offerTextarea.value, DEFAULT_OFFER_EMAIL_TEMPLATE);
+      bookingPreviewEl2.textContent = previewEmailTemplate(bookingTextarea.value, DEFAULT_BOOKING_EMAIL_TEMPLATE);
+    }
+    offerTextarea.addEventListener("focusin", () => {
+      activeTextarea = offerTextarea;
+    });
+    bookingTextarea.addEventListener("focusin", () => {
+      activeTextarea = bookingTextarea;
+    });
+    offerTextarea.addEventListener("input", refreshPreviews);
+    bookingTextarea.addEventListener("input", refreshPreviews);
+    chipsRoot.replaceChildren();
+    const group = document.createElement("div");
+    group.className = "tpl-chips";
+    group.setAttribute("role", "group");
+    group.setAttribute("aria-label", "Insert placeholders");
+    for (const { label, token } of EMAIL_TEMPLATE_PLACEHOLDERS) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "tpl-chip";
+      btn.textContent = label;
+      btn.setAttribute("aria-label", `Insert ${label}`);
+      btn.dataset.token = token;
+      btn.addEventListener("click", () => {
+        insertPlaceholderAtCursor(activeTextarea, token);
+      });
+      group.appendChild(btn);
+    }
+    chipsRoot.appendChild(group);
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== "local") {
+        return;
+      }
+      if (changes[EMAIL_OFFER_TEMPLATE_KEY]) {
+        offerTextarea.value = String(changes[EMAIL_OFFER_TEMPLATE_KEY].newValue ?? "");
+      }
+      if (changes[EMAIL_BOOKING_TEMPLATE_KEY]) {
+        bookingTextarea.value = String(changes[EMAIL_BOOKING_TEMPLATE_KEY].newValue ?? "");
+      }
+      if (changes[EMAIL_OFFER_TEMPLATE_KEY] || changes[EMAIL_BOOKING_TEMPLATE_KEY]) {
+        refreshPreviews();
+      }
+    });
+    refreshPreviews();
+    return { refreshPreviews };
+  }
 
   // src/feature-flags.js
   var DAT_EXT_NUMEO_COLUMN_KEY = "datExtNumeoColumn";
+
+  // src/email-settings.js
+  var DAT_EXT_EMAIL_INCLUDE_SNAPSHOT_KEY = "datExtEmailIncludeSnapshot";
 
   // src/google-account.js
   var DAT_EXT_USER_ACCOUNT_EMAIL_KEY = "datExtUserAccountEmail";
@@ -16,7 +122,18 @@
   // src/popup-entry.js
   var offerEl = document.getElementById("offer-tpl");
   var bookingEl = document.getElementById("booking-tpl");
+  var offerPreviewEl = document.getElementById("offer-preview");
+  var bookingPreviewEl = document.getElementById("booking-preview");
+  var tplChipsHost = document.getElementById("tpl-chips-host");
+  var emailTemplateEditor = offerEl && bookingEl && offerPreviewEl && bookingPreviewEl && tplChipsHost ? initEmailTemplateEditor({
+    offerTextarea: offerEl,
+    bookingTextarea: bookingEl,
+    offerPreviewEl,
+    bookingPreviewEl,
+    chipsRoot: tplChipsHost
+  }) : null;
   var numeoEl = document.getElementById("numeo-column");
+  var emailIncludeSnapshotEl = document.getElementById("email-include-snapshot");
   var tollguruEl = document.getElementById("tollguru-key");
   var googleFallbackEl = document.getElementById("google-toll-fallback");
   var testTollguruBtn = document.getElementById("test-tollguru");
@@ -69,13 +186,16 @@
       EMAIL_OFFER_TEMPLATE_KEY,
       EMAIL_BOOKING_TEMPLATE_KEY,
       DAT_EXT_NUMEO_COLUMN_KEY,
+      DAT_EXT_EMAIL_INCLUDE_SNAPSHOT_KEY,
       DAT_EXT_TOLLGURU_API_KEY,
       DAT_EXT_GOOGLE_TOLL_FALLBACK_KEY
     ],
     (r) => {
       offerEl.value = r[EMAIL_OFFER_TEMPLATE_KEY] ?? "";
       bookingEl.value = r[EMAIL_BOOKING_TEMPLATE_KEY] ?? "";
+      emailTemplateEditor?.refreshPreviews();
       numeoEl.checked = r[DAT_EXT_NUMEO_COLUMN_KEY] !== false;
+      emailIncludeSnapshotEl.checked = r[DAT_EXT_EMAIL_INCLUDE_SNAPSHOT_KEY] === true;
       tollguruEl.value = r[DAT_EXT_TOLLGURU_API_KEY] ?? "";
       googleFallbackEl.checked = r[DAT_EXT_GOOGLE_TOLL_FALLBACK_KEY] !== false;
     }
@@ -88,6 +208,7 @@
         [EMAIL_OFFER_TEMPLATE_KEY]: offerEl.value,
         [EMAIL_BOOKING_TEMPLATE_KEY]: bookingEl.value,
         [DAT_EXT_NUMEO_COLUMN_KEY]: Boolean(numeoEl.checked),
+        [DAT_EXT_EMAIL_INCLUDE_SNAPSHOT_KEY]: Boolean(emailIncludeSnapshotEl?.checked),
         [DAT_EXT_TOLLGURU_API_KEY]: String(tollguruEl.value || "").trim(),
         [DAT_EXT_GOOGLE_TOLL_FALLBACK_KEY]: Boolean(googleFallbackEl.checked)
       },

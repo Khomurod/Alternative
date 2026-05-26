@@ -1,10 +1,26 @@
 import { EMAIL_BOOKING_TEMPLATE_KEY, EMAIL_OFFER_TEMPLATE_KEY } from "./email-template.js";
+import { initEmailTemplateEditor } from "./email-template-editor.js";
 import { DAT_EXT_NUMEO_COLUMN_KEY } from "./feature-flags.js";
+import { DAT_EXT_EMAIL_INCLUDE_SNAPSHOT_KEY } from "./email-settings.js";
 import { DAT_EXT_USER_ACCOUNT_EMAIL_KEY } from "./google-account.js";
 import { DAT_EXT_GOOGLE_TOLL_FALLBACK_KEY, DAT_EXT_TOLLGURU_API_KEY } from "./tollguru-api-key.js";
 
 const offerEl = document.getElementById("offer-tpl");
 const bookingEl = document.getElementById("booking-tpl");
+const offerPreviewEl = document.getElementById("offer-preview");
+const bookingPreviewEl = document.getElementById("booking-preview");
+const tplChipsHost = document.getElementById("tpl-chips-host");
+
+const emailTemplateEditor =
+  offerEl && bookingEl && offerPreviewEl && bookingPreviewEl && tplChipsHost
+    ? initEmailTemplateEditor({
+        offerTextarea: offerEl,
+        bookingTextarea: bookingEl,
+        offerPreviewEl,
+        bookingPreviewEl,
+        chipsRoot: tplChipsHost
+      })
+    : null;
 const numeoEl = document.getElementById("numeo-column");
 const tollguruEl = document.getElementById("tollguru-key");
 const googleFallbackEl = document.getElementById("google-toll-fallback");
@@ -15,6 +31,7 @@ const identityPrimaryEl = document.getElementById("identity-primary");
 const tollguruStatusEl = document.getElementById("tollguru-status");
 const connectGoogleBtn = document.getElementById("connect-google");
 const disconnectGoogleBtn = document.getElementById("disconnect-google");
+const emailIncludeSnapshotEl = document.getElementById("email-include-snapshot");
 
 function clearMsg() {
   msg.textContent = "";
@@ -123,13 +140,16 @@ chrome.storage.local.get(
     EMAIL_OFFER_TEMPLATE_KEY,
     EMAIL_BOOKING_TEMPLATE_KEY,
     DAT_EXT_NUMEO_COLUMN_KEY,
+    DAT_EXT_EMAIL_INCLUDE_SNAPSHOT_KEY,
     DAT_EXT_TOLLGURU_API_KEY,
     DAT_EXT_GOOGLE_TOLL_FALLBACK_KEY
   ],
   (r) => {
     offerEl.value = r[EMAIL_OFFER_TEMPLATE_KEY] ?? "";
     bookingEl.value = r[EMAIL_BOOKING_TEMPLATE_KEY] ?? "";
+    emailTemplateEditor?.refreshPreviews();
     numeoEl.checked = r[DAT_EXT_NUMEO_COLUMN_KEY] !== false;
+    emailIncludeSnapshotEl.checked = r[DAT_EXT_EMAIL_INCLUDE_SNAPSHOT_KEY] === true;
     tollguruEl.value = r[DAT_EXT_TOLLGURU_API_KEY] ?? "";
     googleFallbackEl.checked = r[DAT_EXT_GOOGLE_TOLL_FALLBACK_KEY] !== false;
   }
@@ -143,6 +163,7 @@ save.addEventListener("click", () => {
       [EMAIL_OFFER_TEMPLATE_KEY]: offerEl.value,
       [EMAIL_BOOKING_TEMPLATE_KEY]: bookingEl.value,
       [DAT_EXT_NUMEO_COLUMN_KEY]: Boolean(numeoEl.checked),
+      [DAT_EXT_EMAIL_INCLUDE_SNAPSHOT_KEY]: Boolean(emailIncludeSnapshotEl?.checked),
       [DAT_EXT_TOLLGURU_API_KEY]: String(tollguruEl.value || "").trim(),
       [DAT_EXT_GOOGLE_TOLL_FALLBACK_KEY]: Boolean(googleFallbackEl.checked)
     },
